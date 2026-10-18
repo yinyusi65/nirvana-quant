@@ -41,5 +41,8 @@ htmlcov/
 Thumbs.db
 *.log
 
-# Personal agent context
+# Personal agent context & private reports
 AGENTS.md
+NIRVANA_BANKING_SYSTEMIC_RISK_REPORT.md
+*_REPORT.md
+*report*.md

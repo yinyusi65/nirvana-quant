@@ -25,10 +25,30 @@ build/
 *.egg-info/
 .eggs/
 
-# Testing & Coverage
+# Testing & Coverage (Maintained strictly on local workstation)
 .pytest_cache/
 .coverage
 htmlcov/
+test_*.py
+*_test*.py
+tests/
+test/
+nirvana_cpp/tests/
+
+# Local Demos, Application Datasets & Domain Experiments
+data/
+scripts/
+banking_econometrics/
+consumer_econometrics/
+static_econometrics/
+
+# Agent blueprints, internal notes, skills & private reports
+skills/
+quant_framework_master_blueprint.md
+AGENTS.md
+NIRVANA_BANKING_SYSTEMIC_RISK_REPORT.md
+*_REPORT.md
+*report*.md
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
@@ -40,9 +60,3 @@ htmlcov/
 .DS_Store
 Thumbs.db
 *.log
-
-# Personal agent context & private reports
-AGENTS.md
-NIRVANA_BANKING_SYSTEMIC_RISK_REPORT.md
-*_REPORT.md
-*report*.md

@@ -19,10 +19,10 @@ target_include_directories(nirvana INTERFACE
     $<INSTALL_INTERFACE:include>
 )
 
-# Test Executable
-add_executable(test_core tests/test_core.cpp)
-target_link_libraries(test_core PRIVATE nirvana)
-
-# Enable CTest
-enable_testing()
-add_test(NAME NirvanaCoreTest COMMAND test_core)
+# Test Executable (Built when tests folder exists locally)
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_core.cpp")
+    add_executable(test_core tests/test_core.cpp)
+    target_link_libraries(test_core PRIVATE nirvana)
+    enable_testing()
+    add_test(NAME NirvanaCoreTest COMMAND test_core)
+endif()

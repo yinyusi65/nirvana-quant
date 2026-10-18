@@ -27,3 +27,7 @@ dependencies = [
 [project.urls]
 "Homepage" = "https://github.com/yinyusi65/nirvana-algorithm"
 "Bug Tracker" = "https://github.com/yinyusi65/nirvana-algorithm/issues"
+
+[tool.setuptools.packages.find]
+include = ["nirvana*"]
+

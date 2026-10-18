@@ -19,9 +19,7 @@ nirvana_cpp/
 │   ├── network.hpp      # Directional Connectedness, SVD Multi-Factor Beta, HITS Hub/Authority
 │   ├── multiverse.hpp   # Multiverse Ensemble Reconstructor & Cubic Hermite Boundary Ramp
 │   └── static.hpp       # Two-Stage Regressor, Ramsey RESET & Multiverse Invariant Screening
-├── tests/
-│   └── test_core.cpp    # 223/223 automated functional tests
-└── CMakeLists.txt       # Modern CMake build configuration
+└── CMakeLists.txt       # Modern CMake interface library target
 ```
 
 ---
@@ -65,18 +63,17 @@ Extends classical econometrics with Phase 2 Apoptosis Tree to rescue weak models
 ### Direct Single-Command Compilation (GCC / Clang)
 
 ```bash
-# Compile and run test suite (223 assertions)
-g++ -std=c++20 -O3 -I include tests/test_core.cpp -o test_core
-./test_core
+# Compile with C++20 standard and include nirvana headers
+g++ -std=c++20 -O3 -I include your_app.cpp -o your_app
+./your_app
 ```
 
 ### Modern CMake Integration
 
-```bash
-mkdir build && cd build
-cmake ..
-cmake --build . --config Release
-ctest --output-on-failure
+Add as an interface library target in your `CMakeLists.txt`:
+```cmake
+add_subdirectory(nirvana_cpp)
+target_link_libraries(your_target PRIVATE nirvana)
 ```
 
 ---

@@ -56,14 +56,8 @@ Nirvana isolates domain-specific semantics into modular extensions while keeping
 For ultra-low latency, mission-critical systems, and embedded hardware, Nirvana provides an institutional-grade, zero-dependency C++20 implementation:
 
 * **Header-only**: Simply `#include <nirvana/nirvana.hpp>`.
-* **Zero external dependencies**: Built-in contiguous matrix algebra, Gauss-Jordan inversion, Ridge pseudoinverse, and deflated truncated SVD (no BLAS, LAPACK, or Eigen required).
-* **Fully tested**: 223/223 automated unit test assertions passed.
-
-```bash
-# Compile and run test suite with GCC 12+
-g++ -std=c++20 -O3 -I nirvana_cpp/include nirvana_cpp/tests/test_core.cpp -o test_core
-./test_core
-```
+* **Zero external dependencies**: Built-in contiguous matrix algebra, Gauss-Jordan inversion, Ridge pseudoinverse, and deflated truncated SVD (no external linear algebra libraries required).
+* **Integration**: Compatible with GCC 12+, Clang 15+, and MSVC 19.30+. Include `nirvana_cpp/include` directly into your CMake or build pipelines.
 
 ---
 

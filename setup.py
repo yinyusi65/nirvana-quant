@@ -5,7 +5,7 @@ setup(
     version="1.0.0",
     author="yinyusi65",
     description="Nirvana: Chrono-Cancer Meta-Architecture for High-Dimensional Cyclical Time-Series & Dynamical Network Analysis",
-    packages=find_packages(),
+    packages=find_packages(include=["nirvana", "nirvana.*"]),
     install_requires=[
         "numpy>=1.22.0",
         "pandas>=1.4.0",

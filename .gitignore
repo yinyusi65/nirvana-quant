@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+
+# C / C++ build artifacts
+*.o
+*.obj
+*.exe
+*.dll
+*.dylib
+*.a
+*.lib
+nirvana_cpp/test_core.exe
+nirvana_cpp/demo_banking.exe
+build/
+cmake-build-*/
+.cache/
+
+# Packaging / Distribution
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IDEs & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# Personal agent context
+AGENTS.md

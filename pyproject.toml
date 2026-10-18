@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nirvana-quant"
+version = "1.0.0"
+authors = [
+  { name="yinyusi65" },
+]
+description = "Nirvana: Chrono-Cancer Meta-Architecture for Banking Systemic Risk & Financial Network Econometrics"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = [
+    "numpy>=1.22.0",
+    "pandas>=1.4.0",
+    "scipy>=1.8.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/yinyusi65/nirvana-algorithm"
+"Bug Tracker" = "https://github.com/yinyusi65/nirvana-algorithm/issues"

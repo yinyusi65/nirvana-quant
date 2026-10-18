@@ -13,10 +13,11 @@
 #include "tree.hpp"
 #include "network.hpp"
 #include "multiverse.hpp"
+#include "static.hpp"
 
 namespace nirvana {
 
-inline constexpr const char* VERSION = "1.0.0-cpp20";
-inline constexpr const char* CODENAME = "CHRONO-CANCER";
+inline constexpr const char* VERSION = "1.1.0-cpp20";
+inline constexpr const char* CODENAME = "CHRONO-CANCER-MULTIVERSE";
 
 } // namespace nirvana

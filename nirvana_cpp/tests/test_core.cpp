@@ -253,6 +253,91 @@ void test_multiverse_reconstructor() {
     }
 }
 
+// ----------------------------------------------------------------------------
+// 7. Symbolic Rule Representations (Boolean, LSTR, Hinge Splines)
+// ----------------------------------------------------------------------------
+void test_symbolic_rules() {
+    std::cout << "[+] Running test_symbolic_rules...\n";
+
+    SymbolicRule rule;
+    rule.conditions.push_back({0, true, 22.84});  // X0 <= 22.84
+    rule.conditions.push_back({1, false, 1.81});  // X1 > 1.81
+
+    std::vector<std::string> feat_names = {"Income", "PriceRatio"};
+
+    // 1. Boolean Expression
+    std::string bool_str = rule.to_boolean_expr(feat_names);
+    TEST_ASSERT(bool_str == "I(Income <= 22.84 & PriceRatio > 1.81)", "Boolean expression generation");
+
+    // 2. Continuous LSTR Expression
+    std::string lstr_str = rule.to_lstr_expr(feat_names, 2.5);
+    TEST_ASSERT(lstr_str.find("exp( 2.5 * (Income - 22.84)") != std::string::npos, "LSTR expression structure condition 1");
+    TEST_ASSERT(lstr_str.find("exp( -2.5 * (PriceRatio - 1.81)") != std::string::npos, "LSTR expression structure condition 2");
+
+    // 3. Continuous Hinge Spline Expression
+    std::string hinge_str = rule.to_hinge_expr(feat_names);
+    TEST_ASSERT(hinge_str.find("max(0, 22.84 - Income)") != std::string::npos, "Hinge spline expression condition 1");
+    TEST_ASSERT(hinge_str.find("max(0, PriceRatio - 1.81)") != std::string::npos, "Hinge spline expression condition 2");
+
+    // 4. Exact Evaluations
+    std::vector<double> sample_match = {20.0, 2.5};     // 20 <= 22.84 AND 2.5 > 1.81 -> True (1.0)
+    std::vector<double> sample_nomatch = {25.0, 2.5};   // 25 > 22.84 -> False (0.0)
+
+    TEST_ASSERT(rule.evaluate(sample_match) == 1.0, "Rule evaluate matches");
+    TEST_ASSERT(rule.evaluate(sample_nomatch) == 0.0, "Rule evaluate non-matches");
+
+    double lstr_val = rule.evaluate_lstr(sample_match, 2.5);
+    TEST_ASSERT(lstr_val > 0.5 && lstr_val <= 1.0, "LSTR smooth continuous evaluation in (0.5, 1.0]");
+
+    double hinge_val = rule.evaluate_hinge(sample_match);
+    TEST_ASSERT(std::abs(hinge_val - (2.84 * 0.69)) < 1e-4, "Hinge spline product evaluation");
+}
+
+// ----------------------------------------------------------------------------
+// 8. Nirvana Two-Stage Econometric Regressor & Multiverse Invariance
+// ----------------------------------------------------------------------------
+void test_two_stage_regressor() {
+    std::cout << "[+] Running test_two_stage_regressor...\n";
+
+    size_t N = 80;
+    size_t K = 2;
+    Matrix X(N, K);
+    std::vector<double> y(N);
+
+    // Synthetic nonlinear process with explicit tipping threshold:
+    // y = 2.0 + 1.5*X0 - 1.0*X1 + 4.0 * I(X0 > 0.5) + noise
+    std::mt19937 rng(12345);
+    std::uniform_real_distribution<double> u_dist(-1.0, 1.0);
+    std::normal_distribution<double> eps_dist(0.0, 0.15);
+
+    for (size_t i = 0; i < N; ++i) {
+        X(i, 0) = u_dist(rng);
+        X(i, 1) = u_dist(rng);
+        double step = (X(i, 0) > 0.5) ? 4.0 : 0.0;
+        y[i] = 2.0 + 1.5 * X(i, 0) - 1.0 * X(i, 1) + step + eps_dist(rng);
+    }
+
+    std::vector<std::string> feat_names = {"Feature_0", "Feature_1"};
+    NirvanaTwoStageRegressor reg(6, 3, 1.0);
+    reg.fit(X, y, feat_names);
+
+    // Verify Phase 1 OLS statistics
+    TEST_ASSERT(reg.base_report_.n_obs == N, "Base OLS N observations");
+    TEST_ASSERT(reg.base_report_.r_squared > 0.50, "Base OLS R^2 exceeds 50%");
+    TEST_ASSERT(reg.base_report_.f_stat > 10.0, "Base OLS F-statistic is significant");
+    TEST_ASSERT(reg.base_report_.coefficients.size() == K + 1, "Base OLS includes intercept + features");
+
+    // Verify Multiverse Invariance Screening across 30 Universes
+    MultiverseInvarianceReport rep = reg.screen_multiverse_champions(X, y, 2, 30, 42, feat_names);
+
+    TEST_ASSERT(rep.r2_augmented >= rep.r2_base, "Augmented R^2 >= Base R^2");
+    TEST_ASSERT(!rep.champions.empty(), "Discovered Multiverse Champions extracted");
+    TEST_ASSERT(rep.champions[0].multiverse_survival_rate > 0.50, "Top champion demonstrates high multiverse survival rate");
+    TEST_ASSERT(!rep.champions[0].boolean_expr.empty(), "Champion exports Boolean equation");
+    TEST_ASSERT(!rep.champions[0].lstr_expr.empty(), "Champion exports smooth LSTR equation");
+    TEST_ASSERT(!rep.champions[0].hinge_expr.empty(), "Champion exports continuous Hinge Spline equation");
+}
+
 int main() {
     std::cout << "============================================================\n";
     std::cout << "NIRVANA QUANT C++20 ENGINE - CORE TEST SUITE\n";
@@ -264,6 +349,8 @@ int main() {
     test_tree_engine();
     test_directional_connectedness();
     test_multiverse_reconstructor();
+    test_symbolic_rules();
+    test_two_stage_regressor();
 
     std::cout << "============================================================\n";
     std::cout << "[SUCCESS] ALL " << g_tests_passed << "/" << g_tests_total << " ASSERTIONS PASSED!\n";

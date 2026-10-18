@@ -57,7 +57,7 @@ For ultra-low latency, mission-critical systems, and embedded hardware, Nirvana 
 
 * **Header-only**: Simply `#include <nirvana/nirvana.hpp>`.
 * **Zero external dependencies**: Built-in contiguous matrix algebra, Gauss-Jordan inversion, Ridge pseudoinverse, and deflated truncated SVD (no BLAS, LAPACK, or Eigen required).
-* **Fully tested**: 204/204 automated unit test assertions passed.
+* **Fully tested**: 223/223 automated unit test assertions passed.
 
 ```bash
 # Compile and run test suite with GCC 12+

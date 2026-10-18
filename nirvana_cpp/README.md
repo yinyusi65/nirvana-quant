@@ -17,9 +17,10 @@ nirvana_cpp/
 │   ├── kalman.hpp       # Multivariate Causal Kalman Filter with Huber Innovation Clipping
 │   ├── tree.hpp         # 12-layer Tree with Empirical Fisher Information & Apoptosis Pruning
 │   ├── network.hpp      # Directional Connectedness, SVD Multi-Factor Beta, HITS Hub/Authority
-│   └── multiverse.hpp   # Multiverse Ensemble Reconstructor & Cubic Hermite Boundary Ramp
+│   ├── multiverse.hpp   # Multiverse Ensemble Reconstructor & Cubic Hermite Boundary Ramp
+│   └── static.hpp       # Two-Stage Regressor, Ramsey RESET & Multiverse Invariant Screening
 ├── tests/
-│   └── test_core.cpp    # 204/204 automated functional tests
+│   └── test_core.cpp    # 223/223 automated functional tests
 └── CMakeLists.txt       # Modern CMake build configuration
 ```
 
@@ -50,6 +51,13 @@ Calculates total spillover index ($TCI$), dimension-normalized $TCI_N = TCI \tim
 Reconstructs unobserved pre-listing or missing historical series across $M$ parallel universe trajectories, pruning outliers via median-distance apoptosis and smoothing boundary jumps via cubic Hermite interpolation:
 $$H(t) = 3t^2 - 2t^3$$
 
+### F. Two-Stage Econometrics & Multiverse Invariance (`static.hpp`)
+Extends classical econometrics with Phase 2 Apoptosis Tree to rescue weak models ($R^2$):
+* **Phase 1 OLS Baseline**: Computes Stata-compliant summary tables, standard errors, $t$-statistics, and Ramsey RESET omitted-variable form test.
+* **Phase 2 Residual Tree**: Fits residual variance, pruning idiosyncratic noise with Fisher Information.
+* **Closed-Form Rule Export**: Emits exact formulas in 3 representations: Boolean step $\mathbb{I}$, Logistic Smooth Transition (LSTR), and Hinge Splines.
+* **Multiverse Invariance Screening**: Verifies stability across $M$ parallel universe perturbations (survival rate $\ge 80\%$, sign consistency).
+
 ---
 
 ## 🚀 3. Quick Start
@@ -57,7 +65,7 @@ $$H(t) = 3t^2 - 2t^3$$
 ### Direct Single-Command Compilation (GCC / Clang)
 
 ```bash
-# Compile and run test suite (204 assertions)
+# Compile and run test suite (223 assertions)
 g++ -std=c++20 -O3 -I include tests/test_core.cpp -o test_core
 ./test_core
 ```

@@ -20,6 +20,11 @@ from nirvana import (
     compute_parkinson,
     compute_garman_klass,
     compute_yang_zhang,
+    NirvanaStaticBooster,
+    StaticEconometricReport,
+    stata_regress,
+    stata_summarize,
+    stata_pwcorr,
 )
 
 
@@ -351,6 +356,104 @@ def test_unlisted_bank_median_weight_fallback():
     print("[PASS] Missing bank median asset weight fallback test passed.")
 
 
+def test_static_booster_phase2_r2_elevation():
+    # Verify that NirvanaStaticBooster rescues weak linear models on static tabular data
+    np.random.seed(42)
+    N = 400
+    X1 = np.random.randn(N)
+    X2 = np.random.randn(N)
+    X3 = np.random.randn(N)
+    # Target has strong non-linear threshold interaction (substitute switching):
+    y = 0.1 * X1 + np.where(X2 > 0.5, 3.0, 0.0) * np.where(X3 < -0.2, 2.0, -1.0) + np.random.randn(N) * 0.4
+
+    df_X = pd.DataFrame({"Price_A": X1, "Price_Substitute_B": X2, "Consumer_Income": X3})
+
+    booster = NirvanaStaticBooster(cancer_sensitivity=1.0, max_depth=8, apoptosis_start_depth=5)
+    report = booster.fit(df_X, y)
+
+    # 1. Phase 1 must be a weak model (R^2 < 0.25)
+    assert report.r2_phase1 < 0.25, f"Baseline model was not weak: R^2 = {report.r2_phase1}"
+
+    # 2. Phase 2 must significantly elevate R^2 (R^2 > 0.70)
+    assert report.r2_phase2 > 0.70, f"Phase 2 failed to elevate R^2: R^2 = {report.r2_phase2}"
+    assert report.r2_gain > 0.45, f"R^2 gain insufficient: +Delta R^2 = {report.r2_gain}"
+    assert report.f_p_value < 0.01, f"F-test not statistically significant: p = {report.f_p_value}"
+
+    # 3. Predict works as expected
+    preds = booster.predict(df_X)
+    assert len(preds) == N
+    assert np.isclose(booster.score(df_X, y), report.r2_phase2)
+
+    # 4. Out-of-sample CV confirms genuine generalizability without noise overfitting
+    cv = booster.evaluate_cv(df_X, y, k_folds=4)
+    assert cv["delta_r2_cv_mean"] > 0.35, f"CV Delta R^2 weak: {cv['delta_r2_cv_mean']}"
+    print(f"[PASS] Static Booster Phase 2 R^2 elevation test passed: R^2 {report.r2_phase1:.3f} -> {report.r2_phase2:.3f} (+{report.r2_gain:.3f})")
+
+
+def test_stata_regression_and_diagnostics():
+    np.random.seed(42)
+    N = 300
+    x1 = np.random.randn(N) * 2.0
+    x2 = np.random.randn(N) * 1.5
+    # True DGP: y = 2.0 + 1.5 * x1 - 0.8 * x2 + heteroskedastic noise
+    noise = np.random.randn(N) * (0.5 + 0.3 * np.abs(x1))
+    y = 2.0 + 1.5 * x1 - 0.8 * x2 + noise
+
+    df = pd.DataFrame({"dep_y": y, "indep_x1": x1, "indep_x2": x2})
+
+    # 1. Stata regress
+    res = stata_regress(df, y="dep_y", x=["indep_x1", "indep_x2"], robust=False)
+    assert res.n_obs == N
+    assert res.df_model == 2
+    assert res.df_resid == N - 3
+    assert res.r_squared > 0.70
+    assert np.isclose(res.coefficients["indep_x1"], 1.5, atol=0.2)
+    assert np.isclose(res.coefficients["indep_x2"], -0.8, atol=0.2)
+
+    # 2. Summary text output
+    summary_txt = res.summary()
+    assert "Number of obs   =" in summary_txt
+    assert "Adj R-squared" in summary_txt
+    assert "Root MSE" in summary_txt
+
+    # 3. Robust OLS
+    res_rob = stata_regress(df, y="dep_y", x=["indep_x1", "indep_x2"], robust=True)
+    assert res_rob.is_robust
+    assert res_rob.std_errors["indep_x1"] > 0.0
+
+    # 4. Breusch-Pagan hettest
+    hettest = res.estat_hettest()
+    assert hettest["chi2"] >= 0.0
+    assert "Breusch-Pagan" in hettest["display"]
+
+    # 5. VIF test
+    vif_res = res.estat_vif(df)
+    assert vif_res["mean_vif"] >= 1.0
+    assert len(vif_res["vif_table"]) == 2
+
+    # 6. Ramsey RESET ovtest
+    ovtest = res.estat_ovtest(df)
+    assert ovtest["df_num"] == 3
+    assert "Ramsey RESET" in ovtest["display"]
+
+    # 7. Durbin-Watson
+    dw = res.estat_dwatson()
+    assert 0.0 < dw["d_stat"] < 4.0
+
+    # 8. Normality sktest
+    norm_res = res.sktest()
+    assert norm_res["jb_stat"] >= 0.0
+
+    # 9. Summarize and pwcorr
+    sum_txt = stata_summarize(df)
+    assert "indep_x1" in sum_txt
+    detail_txt = stata_summarize(df, detail=True)
+    assert "Percentiles" in detail_txt
+    corr_txt = stata_pwcorr(df)
+    assert "dep_y" in corr_txt
+    print("[PASS] Stata econometric engine and post-estimation diagnostics test passed.")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("RUNNING NIRVANA COMPREHENSIVE TEST SUITE")
@@ -374,6 +477,9 @@ if __name__ == "__main__":
     test_multiplex_coupling_strength_clamping()
     test_network_custom_lags_and_weights()
     test_unlisted_bank_median_weight_fallback()
+    test_static_booster_phase2_r2_elevation()
+    test_stata_regression_and_diagnostics()
     print("=" * 60)
-    print("ALL 19 NIRVANA CORE TESTS PASSED WITH 100% SUCCESS!")
+    print("ALL 21 NIRVANA CORE TESTS PASSED WITH 100% SUCCESS!")
     print("=" * 60)
+

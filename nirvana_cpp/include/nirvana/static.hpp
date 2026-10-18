@@ -290,14 +290,29 @@ public:
     int max_depth_{8};
     int apoptosis_start_depth_{5};
     double cancer_sensitivity_{1.0};
+    double hierarchical_shrinkage_{0.0};
+    bool soft_splits_{false};
+    double transition_gamma_{3.0};
+    size_t min_samples_leaf_{1};
+    std::vector<int> sign_constraints_{};
     NirvanaTreeEngine tree_engine_{};
     StataRegressionReport base_report_{};
 
-    explicit NirvanaTwoStageRegressor(int max_depth = 8, int apoptosis_start_depth = 5, double cancer_sensitivity = 1.0)
+    explicit NirvanaTwoStageRegressor(int max_depth = 8,
+                                     int apoptosis_start_depth = 5,
+                                     double cancer_sensitivity = 1.0,
+                                     double hierarchical_shrinkage = 0.0,
+                                     bool soft_splits = false,
+                                     double transition_gamma = 3.0,
+                                     size_t min_samples_leaf = 1)
         : max_depth_(max_depth),
           apoptosis_start_depth_(apoptosis_start_depth),
           cancer_sensitivity_(cancer_sensitivity),
-          tree_engine_(cancer_sensitivity) {}
+          hierarchical_shrinkage_(hierarchical_shrinkage),
+          soft_splits_(soft_splits),
+          transition_gamma_(transition_gamma),
+          min_samples_leaf_(min_samples_leaf),
+          tree_engine_(cancer_sensitivity, 0.5, hierarchical_shrinkage, soft_splits, transition_gamma, min_samples_leaf) {}
 
     /**
      * @brief Fit OLS on X -> compute residuals -> train Phase 2 tree on residuals.
@@ -322,6 +337,29 @@ public:
         Matrix invXtX = XtX.inverse(1e-8);
         Matrix y_mat(N, 1, y);
         Matrix beta = invXtX * (Xt * y_mat);
+
+        // Enforce economic sign constraints via coordinate descent
+        if (!sign_constraints_.empty()) {
+            for (int iter = 0; iter < 50; ++iter) {
+                for (size_t j = 1; j <= K; ++j) {
+                    size_t f_idx = j - 1;
+                    if (f_idx < sign_constraints_.size() && sign_constraints_[f_idx] != 0) {
+                        int s = sign_constraints_[f_idx];
+                        double r_j = 0.0;
+                        for (size_t i = 0; i < N; ++i) {
+                            r_j += X_des(i, j) * y[i];
+                        }
+                        for (size_t m = 0; m <= K; ++m) {
+                            if (m != j) r_j -= XtX(j, m) * beta(m, 0);
+                        }
+                        double new_b = r_j / std::max(1e-12, XtX(j, j));
+                        if (s > 0) new_b = std::max(0.0, new_b);
+                        else if (s < 0) new_b = std::min(0.0, new_b);
+                        beta(j, 0) = new_b;
+                    }
+                }
+            }
+        }
 
         // Compute residuals and statistics
         std::vector<double> y_hat(N, 0.0);

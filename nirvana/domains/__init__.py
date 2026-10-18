@@ -16,6 +16,15 @@ from .banking import (
 )
 from .cybersecurity import analyze_cyber_contagion
 from .supply_chain import analyze_supply_chain_risk
+from .consumer import (
+    DEFAULT_CONSUMER_CATEGORIES,
+    DEFAULT_EXPENDITURE_WEIGHTS,
+    analyze_consumer_dynamics,
+)
+from .substitute import (
+    DEFAULT_PROTEIN_SUBSTITUTE_ROLES,
+    analyze_substitution_thresholds,
+)
 
 __all__ = [
     "DEFAULT_BANKING_TIERS",
@@ -24,4 +33,9 @@ __all__ = [
     "classify_sifi_status",
     "analyze_cyber_contagion",
     "analyze_supply_chain_risk",
+    "DEFAULT_CONSUMER_CATEGORIES",
+    "DEFAULT_EXPENDITURE_WEIGHTS",
+    "analyze_consumer_dynamics",
+    "DEFAULT_PROTEIN_SUBSTITUTE_ROLES",
+    "analyze_substitution_thresholds",
 ]

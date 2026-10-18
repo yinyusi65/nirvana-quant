@@ -338,6 +338,63 @@ void test_two_stage_regressor() {
     TEST_ASSERT(!rep.champions[0].hinge_expr.empty(), "Champion exports continuous Hinge Spline equation");
 }
 
+// ----------------------------------------------------------------------------
+// 9. Structural Terminal Protections: James-Stein, Soft Splits, Sign Constraints
+// ----------------------------------------------------------------------------
+void test_structural_terminal_protections() {
+    std::cout << "[+] Running test_structural_terminal_protections...\n";
+
+    // 1. Test James-Stein Hierarchical Bayesian Shrinkage on small leaf sample
+    std::vector<TrainingSample> samples;
+    // Root cluster: 20 points around mean 5.0
+    for (int i = 0; i < 20; ++i) {
+        samples.push_back({{static_cast<double>(i)}, 5.0, 1.0});
+    }
+    // Extreme outlier cluster at leaf: 2 points with mean 25.0
+    samples.push_back({{25.0}, 25.0, 1.0});
+    samples.push_back({{26.0}, 25.0, 1.0});
+
+    // Unshrunk tree (hierarchical_shrinkage = 0.0)
+    NirvanaTreeEngine tree_unshrunk(1.0, 0.5, 0.0, false, 3.0, 1);
+    tree_unshrunk.train(samples);
+
+    // Shrunk tree (hierarchical_shrinkage = 5.0)
+    NirvanaTreeEngine tree_shrunk(1.0, 0.5, 5.0, false, 3.0, 1);
+    tree_shrunk.train(samples);
+
+    double pred_unshrunk = tree_unshrunk.predict({25.5});
+    double pred_shrunk = tree_shrunk.predict({25.5});
+
+    // Shrunk leaf must borrow from parent and be significantly lower than extreme unshrunk 25.0
+    TEST_ASSERT(pred_shrunk < pred_unshrunk, "James-Stein shrinkage pulls outlier leaf towards parent mean");
+    TEST_ASSERT(pred_shrunk > 5.0 && pred_shrunk < 20.0, "Shrunk value lies strictly between parent and leaf sample mean");
+
+    // 2. Test Soft Splits Continuity (Smooth Transition Regimes)
+    NirvanaTreeEngine tree_soft(1.0, 0.5, 0.0, true, 3.0, 1);
+    tree_soft.train(samples);
+    double pred_soft_left = tree_soft.predict({19.0});
+    double pred_soft_mid = tree_soft.predict({22.0});
+    double pred_soft_right = tree_soft.predict({25.0});
+    TEST_ASSERT(pred_soft_mid > pred_soft_left && pred_soft_mid < pred_soft_right, "Soft splits provide continuous intermediate values");
+
+    // 3. Test Economic Sign Constraints in NirvanaTwoStageRegressor
+    size_t N = 50;
+    Matrix X_toy(N, 2);
+    std::vector<double> y_toy(N);
+    for (size_t i = 0; i < N; ++i) {
+        X_toy(i, 0) = static_cast<double>(i);
+        X_toy(i, 1) = static_cast<double>(i) * 0.5;
+        // True relation: y increases with X0, decreases with X1
+        y_toy[i] = 10.0 + 2.0 * X_toy(i, 0) - 1.5 * X_toy(i, 1);
+    }
+    NirvanaTwoStageRegressor reg_sign(4, 2, 1.0);
+    reg_sign.sign_constraints_ = {+1, -1}; // Feature 0 must be >= 0, Feature 1 must be <= 0
+    reg_sign.fit(X_toy, y_toy, {"PosVar", "NegVar"});
+
+    TEST_ASSERT(reg_sign.base_report_.coefficients[1] >= 0.0, "Feature 0 respects positive sign constraint");
+    TEST_ASSERT(reg_sign.base_report_.coefficients[2] <= 0.0, "Feature 1 respects negative sign constraint");
+}
+
 int main() {
     std::cout << "============================================================\n";
     std::cout << "NIRVANA QUANT C++20 ENGINE - CORE TEST SUITE\n";
@@ -351,6 +408,7 @@ int main() {
     test_multiverse_reconstructor();
     test_symbolic_rules();
     test_two_stage_regressor();
+    test_structural_terminal_protections();
 
     std::cout << "============================================================\n";
     std::cout << "[SUCCESS] ALL " << g_tests_passed << "/" << g_tests_total << " ASSERTIONS PASSED!\n";

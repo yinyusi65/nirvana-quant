@@ -99,8 +99,8 @@ int main() {
     Matrix returns(252, 4); // [T=252, N=4]
     // ... fill returns ...
 
-    // 3. Compute Directed Systemic Risk Report
-    SystemicRiskReport report = engine.fit(returns, {"VCB", "BID", "CTG", "TCB"});
+    // 3. Compute Directed Lead-Lag Network Report
+    SystemicRiskReport report = engine.fit(returns, {"Node_A", "Node_B", "Node_C", "Node_D"});
     report.print_summary();
 
     return 0;

@@ -6,7 +6,7 @@ Excises cancerous/overfitting nodes that memorize noise rather than learning cau
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 
@@ -15,6 +15,20 @@ class TrainingSample:
     features: List[float]
     target: float
     weight: float = 1.0
+
+
+@dataclass
+class PathologyAlert:
+    """Structured record of an idiosyncratic anomaly excised by Apoptosis."""
+    node_idx: int
+    depth: int
+    divergence_sigma: float
+    margin_density: float
+    sample_count: int
+    sample_indices: List[int]
+    feature_fingerprint: Dict[str, float]
+    trigger_rule: str
+    diagnosis: str
 
 
 @dataclass
@@ -28,10 +42,12 @@ class FlatTreeNode:
     is_leaf: bool = True
     is_pruned_apoptosis: bool = False
     sample_count: int = 0
+    sample_indices: List[int] = field(default_factory=list)
     fisher_info: float = 0.0
     margin_density: float = 0.0
     feature_std: float = 1.0
     shrinkage_lambda: float = 1.0
+    feature_fingerprint: List[float] = field(default_factory=list)
     left_child: int = -1
     right_child: int = -1
 
@@ -39,7 +55,8 @@ class FlatTreeNode:
 class NirvanaTreeEngine:
     """
     12-layer Real-Data Tree Engine with Empirical Fisher Apoptosis,
-    Hierarchical Bayesian James-Stein Shrinkage, Soft LSTR Regimes, and Economic Sign Constraints.
+    Hierarchical Bayesian James-Stein Shrinkage, Soft LSTR Regimes,
+    Economic Sign Constraints, and Dual-Channel Pathology Biopsy Reporting.
     """
 
     MAX_DEPTH = 12
@@ -114,6 +131,10 @@ class NirvanaTreeEngine:
         raw_val = float(np.mean(node_vals))
         self.nodes[node_idx].raw_leaf_value = raw_val
         self.nodes[node_idx].sample_count = n_samples
+        self.nodes[node_idx].sample_indices = list(sample_indices)
+        if sample_indices and dataset:
+            feats = [dataset[i].features for i in sample_indices]
+            self.nodes[node_idx].feature_fingerprint = [float(v) for v in np.mean(feats, axis=0)]
 
         parent_idx = self.nodes[node_idx].parent_idx
         if parent_idx >= 0 and self.hierarchical_shrinkage > 0.0:
@@ -207,13 +228,16 @@ class NirvanaTreeEngine:
 
     def _run_apoptosis_audit(self):
         """
-        Phase 2 Apoptosis:
+        Phase 2 Apoptosis & Pathology Biopsy Audit:
         Audit each node at depth >= apoptosis_start_depth.
-        Excise leaves with pathological Fisher Information / fragile margin density.
+        Excise leaves with pathological Fisher Information / fragile margin density,
+        and generate structured PathologyAlerts for the Incident Channel.
         """
         root_val = self.nodes[0].value if self.nodes else 0.0
+        self.pathology_alerts: List[PathologyAlert] = []
+
         for i in range(len(self.nodes)):
-            if self.nodes[i].depth >= self.apoptosis_start_depth and not self.nodes[i].is_leaf:
+            if self.nodes[i].depth >= self.apoptosis_start_depth:
                 # Calculate proxy empirical Fisher info (shift-invariant divergence from baseline root mean)
                 fisher = ((self.nodes[i].value - root_val) ** 2) / (self.baseline_var + 1e-9)
                 margin = float(self.nodes[i].sample_count) / max(float(self.nodes[0].sample_count), 1.0)
@@ -221,8 +245,87 @@ class NirvanaTreeEngine:
                 self.nodes[i].margin_density = margin
 
                 # Apoptosis condition: high variance shock with razor-thin sample support
-                if fisher * self.cancer_sensitivity > 15.0 and margin < 0.03:
+                if fisher * self.cancer_sensitivity > 15.0 and margin < 0.05:
                     self.nodes[i].is_pruned_apoptosis = True
+
+                    sigma_div = float(np.sqrt(max(0.0, fisher)))
+                    fp_dict = {}
+                    if self.nodes[i].feature_fingerprint:
+                        for f_idx, f_val in enumerate(self.nodes[i].feature_fingerprint):
+                            fn = self.feature_names[f_idx] if f_idx < len(self.feature_names) else f"X{f_idx}"
+                            fp_dict[fn] = float(f_val)
+
+                    trig = ""
+                    if self.nodes[i].feature_idx >= 0:
+                        fn = self.feature_names[self.nodes[i].feature_idx] if self.nodes[i].feature_idx < len(self.feature_names) else f"X{self.nodes[i].feature_idx}"
+                        trig = f"{fn} <= {self.nodes[i].threshold:.3f}"
+
+                    self.pathology_alerts.append(PathologyAlert(
+                        node_idx=i,
+                        depth=self.nodes[i].depth,
+                        divergence_sigma=sigma_div,
+                        margin_density=margin,
+                        sample_count=self.nodes[i].sample_count,
+                        sample_indices=list(self.nodes[i].sample_indices),
+                        feature_fingerprint=fp_dict,
+                        trigger_rule=trig,
+                        diagnosis="Idiosyncratic Extreme Divergence / Latent Counterfactual Fragility Excised by Apoptosis",
+                    ))
+
+    def export_pathology_alerts(self) -> List[Dict[str, Any]]:
+        """Export all excised pathology anomalies as structured case study records."""
+        if not hasattr(self, "pathology_alerts"):
+            return []
+        return [
+            {
+                "node_idx": a.node_idx,
+                "depth": a.depth,
+                "divergence_sigma": round(a.divergence_sigma, 2),
+                "margin_density": round(a.margin_density, 4),
+                "sample_count": a.sample_count,
+                "sample_indices": a.sample_indices,
+                "feature_fingerprint": a.feature_fingerprint,
+                "trigger_rule": a.trigger_rule,
+                "diagnosis": a.diagnosis,
+            }
+            for a in self.pathology_alerts
+        ]
+
+    def evaluate_stress_proximity(self, features: Union[List[float], np.ndarray]) -> Dict[str, Any]:
+        """
+        Reverse Stress-Testing Radar:
+        Computes proximity [0.0, 100.0]% of a given observation to the nearest excised pathology case study.
+        """
+        alerts = getattr(self, "pathology_alerts", [])
+        if not alerts or not self.nodes:
+            return {"proximity_pct": 0.0, "nearest_case_idx": -1, "risk_level": "NORMAL", "distance": 999.0}
+
+        f_vec = np.asarray(features, dtype=float).ravel()
+        min_dist = float("inf")
+        nearest_alert = alerts[0]
+
+        for alert in alerts:
+            node = self.nodes[alert.node_idx]
+            if node.feature_fingerprint and len(node.feature_fingerprint) == len(f_vec):
+                fp = np.asarray(node.feature_fingerprint, dtype=float)
+                dist = float(np.linalg.norm(f_vec - fp))
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_alert = alert
+
+        scale = max(float(np.sqrt(len(f_vec))), 1.0)
+        proximity = float(100.0 * np.exp(-min_dist / scale))
+        risk_level = "CRITICAL" if proximity >= 80.0 else ("ELEVATED" if proximity >= 50.0 else "NORMAL")
+
+        return {
+            "proximity_pct": round(proximity, 2),
+            "nearest_case_idx": nearest_alert.node_idx,
+            "nearest_depth": nearest_alert.depth,
+            "risk_level": risk_level,
+            "distance": round(min_dist, 4),
+            "nearest_fingerprint": nearest_alert.feature_fingerprint,
+            "diagnosis": nearest_alert.diagnosis,
+        }
 
     def fit(self, X: Union[np.ndarray, "pd.DataFrame"], y: Union[np.ndarray, "pd.Series"]):
         """Fit tree on static matrix X and target vector y."""

@@ -102,6 +102,7 @@ class StaticEconometricReport:
     feature_importances: Dict[str, float]
     pruning_stats: Dict[str, Union[int, float]]
     top_substitution_thresholds: List[str] = field(default_factory=list)
+    pathology_alerts: List[Dict[str, Any]] = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [
@@ -135,6 +136,16 @@ class StaticEconometricReport:
             lines.append("4. DISCOVERED STRUCTURAL & SUBSTITUTION THRESHOLDS:")
             for rule in self.top_substitution_thresholds[:6]:
                 lines.append(f"   -> {rule}")
+
+        if self.pathology_alerts:
+            lines.append("-" * 78)
+            lines.append("5. PATHOLOGY BIOPSY ALERTS (SENTINEL COUNTERFACTUAL CASE STUDIES):")
+            for alert in self.pathology_alerts[:5]:
+                lines.append(
+                    f"   [BIOPSY #{alert['node_idx']}] Depth {alert['depth']} | "
+                    f"Divergence: {alert['divergence_sigma']} sigma | Support: {alert['sample_count']} samples "
+                    f"| Indices: {alert['sample_indices']} | Trigger: {alert.get('trigger_rule', 'N/A')}"
+                )
 
         lines.append("=" * 78)
         return "\n".join(lines)
@@ -257,6 +268,24 @@ class NirvanaTreeRegressor(BaseEstimator, RegressorMixin):
         if self.tree_engine_ is None:
             raise ValueError("Model is not fitted yet.")
         return self.tree_engine_.export_all_symbolic_rules()
+
+    def export_pathology_alerts(self) -> List[Dict[str, Any]]:
+        """Export all excised pathology anomalies as structured case study records."""
+        if self.tree_engine_ is None:
+            raise ValueError("Model is not fitted yet.")
+        return self.tree_engine_.export_pathology_alerts()
+
+    def evaluate_stress_proximity(self, features: Union[List[float], np.ndarray, Any]) -> Dict[str, Any]:
+        """
+        Reverse Stress-Testing Radar:
+        Computes proximity [0.0, 100.0]% of a given observation to the nearest excised pathology case study.
+        """
+        if self.tree_engine_ is None:
+            raise ValueError("Model is not fitted yet.")
+        if hasattr(features, "values"):
+            features = features.values
+        return self.tree_engine_.evaluate_stress_proximity(features)
+
 
 
 class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
@@ -480,6 +509,7 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
             feature_importances=feat_importances,
             pruning_stats=pruning_stats,
             top_substitution_thresholds=threshold_rules,
+            pathology_alerts=self.tree_engine_.export_pathology_alerts(),
         )
         return self
 
@@ -648,6 +678,22 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         if self.tree_engine_ is None:
             raise ValueError("Model is not fitted yet.")
         return self.tree_engine_.export_all_symbolic_rules()
+
+    def export_pathology_alerts(self) -> List[Dict[str, Any]]:
+        """Export all excised pathology anomalies as structured case study records."""
+        if self.tree_engine_ is None:
+            raise ValueError("Model is not fitted yet.")
+        return self.tree_engine_.export_pathology_alerts()
+
+    def evaluate_stress_proximity(self, features: Union[List[float], np.ndarray, Any]) -> Dict[str, Any]:
+        """
+        Reverse Stress-Testing Radar:
+        Computes proximity [0.0, 100.0]% of a given observation to the nearest excised pathology case study.
+        """
+        if self.tree_engine_ is None:
+            raise ValueError("Model is not fitted yet.")
+        return self.tree_engine_.evaluate_stress_proximity(features)
+
 
 
 class NirvanaStaticBooster(NirvanaTwoStageRegressor):

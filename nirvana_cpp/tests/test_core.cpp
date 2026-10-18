@@ -395,6 +395,59 @@ void test_structural_terminal_protections() {
     TEST_ASSERT(reg_sign.base_report_.coefficients[2] <= 0.0, "Feature 1 respects negative sign constraint");
 }
 
+void test_pathology_biopsy_and_stress_radar() {
+    std::cout << "[+] Running test_pathology_biopsy_and_stress_radar...\n";
+
+    // Create dataset with 100 normal points and 2 extreme outlier points
+    std::vector<TrainingSample> samples;
+    for (int i = 0; i < 100; ++i) {
+        double v0 = static_cast<double>(i - 50) * 0.05;
+        double v1 = static_cast<double>((i % 11) - 5) * 0.1;
+        samples.push_back({{v0, v1}, 2.0 * v0 + 0.5 * v1, 1.0});
+    }
+    // Extreme idiosyncratic outlier cluster (thin margin, massive variance)
+    samples.push_back({{2.6, 2.6}, 300.0, 1.0});
+    samples.push_back({{2.7, 2.5}, 310.0, 1.0});
+
+    // 1. Test directly in NirvanaTreeEngine
+    NirvanaTreeEngine tree(3.0, 0.5, 0.0, false, 3.0, 1, 1);
+    tree.train(samples);
+
+    const auto& alerts = tree.get_pathology_alerts();
+    TEST_ASSERT(!alerts.empty(), "Apoptosis captures extreme outlier into pathology alerts");
+    TEST_ASSERT(alerts[0].sample_count == 2, "Pathology alert contains exact sample count");
+    TEST_ASSERT(alerts[0].divergence_sigma > 2.0, "Divergence sigma reflects outlier shock");
+    TEST_ASSERT(!alerts[0].feature_fingerprint.empty(), "Feature fingerprint is populated");
+
+    // Test Stress Proximity Radar on tree
+    auto prox_crit = tree.evaluate_stress_proximity({2.65, 2.55});
+    TEST_ASSERT(prox_crit.proximity_pct > 70.0, "Proximity is high for near-pathology query");
+    TEST_ASSERT(prox_crit.risk_level == "CRITICAL" || prox_crit.risk_level == "ELEVATED", "Risk level elevated for crisis query");
+    TEST_ASSERT(prox_crit.distance < 1.0, "Distance is minimal to nearest fingerprint");
+
+    auto prox_norm = tree.evaluate_stress_proximity({0.0, 0.0});
+    TEST_ASSERT(prox_norm.proximity_pct < prox_crit.proximity_pct, "Normal query has lower proximity");
+    TEST_ASSERT(prox_norm.risk_level == "NORMAL", "Normal query has NORMAL risk level");
+
+    // 2. Test in NirvanaTwoStageRegressor
+    size_t N_total = samples.size();
+    Matrix X(N_total, 2);
+    std::vector<double> y(N_total);
+    for (size_t i = 0; i < N_total; ++i) {
+        X(i, 0) = samples[i].features[0];
+        X(i, 1) = samples[i].features[1];
+        y[i] = samples[i].target;
+    }
+    NirvanaTwoStageRegressor reg(6, 1, 3.0);
+    reg.fit(X, y, {"Feature0", "Feature1"});
+
+    auto reg_alerts = reg.get_pathology_alerts();
+    TEST_ASSERT(!reg_alerts.empty(), "Two-stage regressor exposes pathology alerts");
+    auto reg_prox = reg.evaluate_stress_proximity({2.65, 2.55});
+    TEST_ASSERT(reg_prox.proximity_pct > 70.0, "Regressor exposes stress proximity radar");
+    TEST_ASSERT(reg_prox.risk_level == "CRITICAL" || reg_prox.risk_level == "ELEVATED", "Regressor risk level elevated");
+}
+
 int main() {
     std::cout << "============================================================\n";
     std::cout << "NIRVANA QUANT C++20 ENGINE - CORE TEST SUITE\n";
@@ -409,6 +462,7 @@ int main() {
     test_symbolic_rules();
     test_two_stage_regressor();
     test_structural_terminal_protections();
+    test_pathology_biopsy_and_stress_radar();
 
     std::cout << "============================================================\n";
     std::cout << "[SUCCESS] ALL " << g_tests_passed << "/" << g_tests_total << " ASSERTIONS PASSED!\n";

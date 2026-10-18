@@ -458,6 +458,13 @@ public:
             tree_samples[i].target = residuals[i];
             tree_samples[i].weight = 1.0;
         }
+        tree_engine_.cancer_sensitivity_ = cancer_sensitivity_;
+        tree_engine_.apoptosis_start_depth_ = apoptosis_start_depth_;
+        tree_engine_.hierarchical_shrinkage_ = hierarchical_shrinkage_;
+        tree_engine_.soft_splits_ = soft_splits_;
+        tree_engine_.transition_gamma_ = transition_gamma_;
+        tree_engine_.min_samples_leaf_ = min_samples_leaf_;
+        tree_engine_.sign_constraints_ = sign_constraints_;
         tree_engine_.train(tree_samples);
     }
 
@@ -700,6 +707,14 @@ public:
         }
 
         return rep;
+    }
+
+    const std::vector<PathologyAlert>& get_pathology_alerts() const {
+        return tree_engine_.get_pathology_alerts();
+    }
+
+    StressProximityResult evaluate_stress_proximity(const std::vector<double>& features) const {
+        return tree_engine_.evaluate_stress_proximity(features);
     }
 };
 

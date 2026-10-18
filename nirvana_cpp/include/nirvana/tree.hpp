@@ -16,6 +16,27 @@ struct TrainingSample {
     double weight{1.0};
 };
 
+struct PathologyAlert {
+    int node_idx{0};
+    int depth{0};
+    double divergence_sigma{0.0};
+    double margin_density{0.0};
+    size_t sample_count{0};
+    std::vector<double> feature_fingerprint{};
+    std::string trigger_rule{""};
+    std::string diagnosis{"Idiosyncratic Extreme Divergence / Latent Counterfactual Fragility Excised by Apoptosis"};
+};
+
+struct StressProximityResult {
+    double proximity_pct{0.0};
+    int nearest_case_idx{-1};
+    int nearest_depth{-1};
+    std::string risk_level{"NORMAL"};
+    double distance{999.0};
+    std::vector<double> nearest_fingerprint{};
+    std::string diagnosis{""};
+};
+
 struct FlatTreeNode {
     int depth{0};
     int feature_idx{-1};
@@ -30,6 +51,7 @@ struct FlatTreeNode {
     double margin_density{0.0};
     double feature_std{1.0};
     double shrinkage_lambda{1.0};
+    std::vector<double> feature_fingerprint{};
     int left_child{-1};
     int right_child{-1};
 };
@@ -45,6 +67,7 @@ public:
 
     double cancer_sensitivity_{1.0};
     double oof_consistency_{0.5};
+    int apoptosis_start_depth_{APOPTOSIS_START_DEPTH};
     double baseline_var_{1e-8};
     double hierarchical_shrinkage_{0.0};
     bool soft_splits_{false};
@@ -52,15 +75,18 @@ public:
     size_t min_samples_leaf_{1};
     std::vector<int> sign_constraints_{};
     std::vector<FlatTreeNode> nodes_{};
+    std::vector<PathologyAlert> pathology_alerts_{};
 
     explicit NirvanaTreeEngine(double cancer_sensitivity = 1.0,
                                double oof_consistency = 0.5,
                                double hierarchical_shrinkage = 0.0,
                                bool soft_splits = false,
                                double transition_gamma = 3.0,
-                               size_t min_samples_leaf = 1)
+                               size_t min_samples_leaf = 1,
+                               int apoptosis_start_depth = APOPTOSIS_START_DEPTH)
         : cancer_sensitivity_(cancer_sensitivity),
           oof_consistency_(oof_consistency),
+          apoptosis_start_depth_(apoptosis_start_depth),
           hierarchical_shrinkage_(hierarchical_shrinkage),
           soft_splits_(soft_splits),
           transition_gamma_(transition_gamma),
@@ -68,6 +94,55 @@ public:
 
     void clear() {
         nodes_.clear();
+        pathology_alerts_.clear();
+    }
+
+    const std::vector<PathologyAlert>& get_pathology_alerts() const {
+        return pathology_alerts_;
+    }
+
+    StressProximityResult evaluate_stress_proximity(const std::vector<double>& features) const {
+        if (pathology_alerts_.empty()) {
+            return StressProximityResult{0.0, -1, -1, "NORMAL", 999.0, {}, ""};
+        }
+
+        double min_dist = std::numeric_limits<double>::infinity();
+        size_t nearest_idx = 0;
+
+        for (size_t i = 0; i < pathology_alerts_.size(); ++i) {
+            const auto& alert = pathology_alerts_[i];
+            if (alert.feature_fingerprint.size() == features.size()) {
+                double d2 = 0.0;
+                for (size_t j = 0; j < features.size(); ++j) {
+                    double diff = features[j] - alert.feature_fingerprint[j];
+                    d2 += diff * diff;
+                }
+                double dist = std::sqrt(d2);
+                if (dist < min_dist) {
+                    min_dist = dist;
+                    nearest_idx = i;
+                }
+            }
+        }
+
+        if (std::isinf(min_dist)) {
+            return StressProximityResult{0.0, -1, -1, "NORMAL", 999.0, {}, ""};
+        }
+
+        double scale = std::max(std::sqrt(static_cast<double>(features.size())), 1.0);
+        double proximity = 100.0 * std::exp(-min_dist / scale);
+        std::string risk = (proximity >= 80.0) ? "CRITICAL" : ((proximity >= 50.0) ? "ELEVATED" : "NORMAL");
+
+        const auto& nearest = pathology_alerts_[nearest_idx];
+        return StressProximityResult{
+            proximity,
+            nearest.node_idx,
+            nearest.depth,
+            risk,
+            min_dist,
+            nearest.feature_fingerprint,
+            nearest.diagnosis
+        };
     }
 
     void train(const std::vector<TrainingSample>& dataset) {
@@ -98,6 +173,41 @@ public:
 
         nodes_.emplace_back();
         build_node(0, clean_samples, 0);
+        run_apoptosis_audit();
+    }
+
+    void run_apoptosis_audit() {
+        if (nodes_.empty()) return;
+        double root_val = nodes_[0].value;
+        double root_count = std::max(1.0, static_cast<double>(nodes_[0].sample_count));
+        pathology_alerts_.clear();
+
+        for (size_t i = 0; i < nodes_.size(); ++i) {
+            auto& node = nodes_[i];
+            if (node.depth >= apoptosis_start_depth_) {
+                double diff = node.value - root_val;
+                double fisher = (diff * diff) / (baseline_var_ + 1e-9);
+                double margin = static_cast<double>(node.sample_count) / root_count;
+                node.fisher_info = fisher;
+                node.margin_density = margin;
+
+                if (fisher * cancer_sensitivity_ > 15.0 && margin < 0.05) {
+                    node.is_pruned_apoptosis = true;
+
+                    PathologyAlert alert;
+                    alert.node_idx = static_cast<int>(i);
+                    alert.depth = node.depth;
+                    alert.divergence_sigma = std::sqrt(std::max(0.0, fisher));
+                    alert.margin_density = margin;
+                    alert.sample_count = node.sample_count;
+                    alert.feature_fingerprint = node.feature_fingerprint;
+                    if (node.feature_idx >= 0) {
+                        alert.trigger_rule = "Feature " + std::to_string(node.feature_idx) + " <= " + std::to_string(node.threshold);
+                    }
+                    pathology_alerts_.push_back(alert);
+                }
+            }
+        }
     }
 
     double predict_soft(const std::vector<double>& features) const {
@@ -155,6 +265,19 @@ private:
         FlatTreeNode& node = nodes_[node_idx];
         node.depth = depth;
         node.sample_count = samples.size();
+
+        if (!samples.empty()) {
+            size_t k = samples[0]->features.size();
+            node.feature_fingerprint.assign(k, 0.0);
+            for (const auto* s : samples) {
+                for (size_t j = 0; j < k; ++j) {
+                    node.feature_fingerprint[j] += s->features[j];
+                }
+            }
+            for (size_t j = 0; j < k; ++j) {
+                node.feature_fingerprint[j] /= static_cast<double>(samples.size());
+            }
+        }
 
         double sum_y = 0.0, sum_w = 0.0;
         for (const auto* s : samples) {
@@ -274,18 +397,6 @@ private:
             sum_g2 += g * g;
         }
         node.fisher_info = sum_g2 / std::max(1.0, static_cast<double>(samples.size()));
-
-        // Phase 2 Apoptosis Pruning: triggered at deeper layers
-        if (depth >= APOPTOSIS_START_DEPTH) {
-            double s_cancer = (node.fisher_info / (node.margin_density * std::sqrt(samples.size() + 1.0)))
-                              * (1.0 - oof_consistency_);
-            if (s_cancer > cancer_sensitivity_ * 2.5) {
-                // Apoptosis triggered: collapse to parent node with empirical Bayes shrinkage
-                node.is_pruned_apoptosis = true;
-                node.is_leaf = true;
-                return;
-            }
-        }
 
         int left_idx = static_cast<int>(nodes_.size());
         nodes_.emplace_back();

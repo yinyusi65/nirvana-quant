@@ -261,6 +261,65 @@ def test_structural_terminal_protections():
     assert np.all(np.isfinite(preds_svd))
 
 
+def test_pathology_biopsy_and_stress_radar():
+    """Verify Dual-Channel Pathology Biopsy records and reverse stress proximity radar."""
+    from nirvana import NirvanaStaticBooster
+
+    np.random.seed(1607)
+    # 100 normal observations
+    N_normal = 100
+    X_normal = np.random.normal(0, 1, size=(N_normal, 2))
+    y_normal = 2.0 * X_normal[:, 0] + np.random.normal(0, 0.1, size=N_normal)
+
+    # 2 extreme idiosyncratic shock observations (outliers with massive variance and thin support)
+    X_outlier = np.array([[10.0, 10.0], [10.2, 9.8]])
+    y_outlier = np.array([250.0, 260.0])
+
+    X = np.vstack([X_normal, X_outlier])
+    y = np.concatenate([y_normal, y_outlier])
+
+    df = pd.DataFrame(X, columns=["LiquidityShock", "CreditSpread"])
+    target = pd.Series(y, name="LossRate")
+
+    booster = NirvanaStaticBooster(
+        base_estimator="ols",
+        cancer_sensitivity=2.0,
+        max_depth=6,
+        apoptosis_start_depth=1,
+        min_samples_split=2,
+        min_samples_leaf=1,
+    )
+    report = booster.fit(df, target)
+
+    alerts = booster.export_pathology_alerts()
+    assert len(alerts) > 0, "Apoptosis excises extreme outlier branch and populates pathology alerts"
+    assert len(report.pathology_alerts) == len(alerts), "Report contains pathology alerts"
+
+    alert = alerts[0]
+    assert "node_idx" in alert
+    assert "divergence_sigma" in alert
+    assert "feature_fingerprint" in alert
+    assert "trigger_rule" in alert
+    assert "diagnosis" in alert
+    assert alert["divergence_sigma"] > 2.0, "Divergence sigma reflects extreme outlier distance"
+
+    # Radar proximity evaluation
+    critical_query = [10.1, 9.9]  # Near the excised pathology case
+    radar_crit = booster.evaluate_stress_proximity(critical_query)
+    assert radar_crit["proximity_pct"] > 70.0, f"Proximity should be high for critical case: {radar_crit['proximity_pct']}"
+    assert radar_crit["risk_level"] in ["CRITICAL", "ELEVATED"], f"Risk level should be elevated: {radar_crit['risk_level']}"
+    assert radar_crit["distance"] < 1.0, f"Distance should be close: {radar_crit['distance']}"
+
+    normal_query = [0.0, 0.0]  # Far from the excised pathology case
+    radar_norm = booster.evaluate_stress_proximity(normal_query)
+    assert radar_norm["proximity_pct"] < radar_crit["proximity_pct"], "Normal query has much lower proximity than crisis query"
+    assert radar_norm["risk_level"] == "NORMAL", "Normal query has NORMAL risk level"
+
+    # Check report summary includes the biopsy section
+    summary_text = report.summary()
+    assert "PATHOLOGY BIOPSY ALERTS" in summary_text, "Summary prints Pathology Biopsy sentinel section"
+
+
 if __name__ == "__main__":
     test_static_panel_loading()
     test_static_booster_and_r2_elevation()
@@ -269,5 +328,6 @@ if __name__ == "__main__":
     test_general_purpose_sklearn_pipeline_and_stability()
     test_phase2_multiverse_variable_proof()
     test_structural_terminal_protections()
+    test_pathology_biopsy_and_stress_radar()
     print("ALL STATIC ECONOMETRICS TESTS PASSED 100%!")
 

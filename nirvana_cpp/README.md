@@ -20,8 +20,6 @@ nirvana_cpp/
 │   └── multiverse.hpp   # Multiverse Ensemble Reconstructor & Cubic Hermite Boundary Ramp
 ├── tests/
 │   └── test_core.cpp    # 204/204 automated functional tests
-├── examples/
-│   └── demo_banking.cpp # 27-bank systemic risk simulation & rolling phase transition detector
 └── CMakeLists.txt       # Modern CMake build configuration
 ```
 
@@ -62,10 +60,6 @@ $$H(t) = 3t^2 - 2t^3$$
 # Compile and run test suite (204 assertions)
 g++ -std=c++20 -O3 -I include tests/test_core.cpp -o test_core
 ./test_core
-
-# Compile and run 27-bank systemic risk demo
-g++ -std=c++20 -O3 -I include examples/demo_banking.cpp -o demo_banking
-./demo_banking
 ```
 
 ### Modern CMake Integration

@@ -23,10 +23,6 @@ target_include_directories(nirvana INTERFACE
 add_executable(test_core tests/test_core.cpp)
 target_link_libraries(test_core PRIVATE nirvana)
 
-# Examples Executable
-add_executable(demo_banking examples/demo_banking.cpp)
-target_link_libraries(demo_banking PRIVATE nirvana)
-
 # Enable CTest
 enable_testing()
 add_test(NAME NirvanaCoreTest COMMAND test_core)

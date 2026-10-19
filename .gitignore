@@ -61,3 +61,8 @@ NIRVANA_BANKING_SYSTEMIC_RISK_REPORT.md
 .DS_Store
 Thumbs.db
 *.log
+
+# Prevent uploading test notebooks and datasets
+test_*.ipynb
+*.csv
+all27_*.csv

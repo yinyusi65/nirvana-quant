@@ -134,7 +134,7 @@ print(f"Point Forecast: {y_pred[0]:.3f}, 95% Interval: [{y_lower[0]:.3f}, {y_upp
 ---
 
 ## Authors & Maintainers
-* **Lưu Văn Toàn** (`yinyusi65`)
+* **yinyusi65**
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

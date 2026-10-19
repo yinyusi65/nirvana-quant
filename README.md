@@ -6,7 +6,7 @@
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg?logo=python&logoColor=white" alt="Python Versions"></a>
   <a href="nirvana_cpp/"><img src="https://img.shields.io/badge/C%2B%2B-20%20Header--Only-purple.svg?logo=cplusplus&logoColor=white" alt="C++20"></a>
   <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-green.svg" alt="License: GPL v3"></a>
-  <a href="https://colab.research.google.com/github/yinyusi65/nirvana-algorithm/blob/main/test_nirvana_netbank_full_pipeline.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
+  <a href="https://colab.research.google.com/github/yinyusi65/nirvana-quant/blob/main/test_nirvana_netbank_full_pipeline.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
 </p>
 
 ---
@@ -21,7 +21,7 @@ The library bridges classical econometric foundations (Vector Autoregressions, D
 
 Test the complete end-to-end systemic risk pipeline across 27 commercial banks with interactive network graphs, SVD market decoupling, domino default contagion, and Basel IV macroprudential capital surcharge calibration:
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yinyusi65/nirvana-algorithm/blob/main/test_nirvana_netbank_full_pipeline.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yinyusi65/nirvana-quant/blob/main/test_nirvana_netbank_full_pipeline.ipynb)
 
 ---
 
@@ -123,13 +123,13 @@ pip install nirvana-quant
 
 ### From GitHub
 ```bash
-pip install git+https://github.com/yinyusi65/nirvana-algorithm.git
+pip install git+https://github.com/yinyusi65/nirvana-quant.git
 ```
 
 ### From Local Source
 ```bash
-git clone https://github.com/yinyusi65/nirvana-algorithm.git
-cd nirvana-algorithm
+git clone https://github.com/yinyusi65/nirvana-quant.git
+cd nirvana-quant
 pip install -e .
 ```
 

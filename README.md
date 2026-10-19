@@ -1,5 +1,6 @@
 # Nirvana: A Statistical and Econometric Framework for Multivariate Cyclical Time Series
 
+[![PyPI Version](https://img.shields.io/pypi/v/nirvana-quant.svg?color=blue)](https://pypi.org/project/nirvana-quant/)
 [![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20%20Header--Only-purple.svg)](nirvana_cpp/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)

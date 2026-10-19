@@ -1,19 +1,66 @@
 # nirvana-quant: A Statistical and Econometric Framework for Multivariate Cyclical Time Series
 
-[![PyPI Version](https://img.shields.io/pypi/v/nirvana-quant.svg?color=blue)](https://pypi.org/project/nirvana-quant/)
-[![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
-[![C++ Standard](https://img.shields.io/badge/C%2B%2B-20%20Header--Only-purple.svg)](nirvana_cpp/)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-
-`nirvana-quant` is an open-source Python and C++ research library for **multivariate time-series econometrics**, state-space filtering, directional network spillover modeling, and counterfactual panel reconstruction.
-
-The toolkit provides statistical implementations combining classical time-series econometrics (Vector Autoregressions, Diebold–Yılmaz spillover decompositions, Kalman filtering) with modern non-parametric learning (piecewise regression trees, Fisher Information regularization, and finite-sample conformal prediction).
+<p align="center">
+  <a href="https://pypi.org/project/nirvana-quant/"><img src="https://img.shields.io/pypi/v/nirvana-quant.svg?color=007ec6&logo=pypi&logoColor=white" alt="PyPI Version"></a>
+  <a href="https://pypi.org/project/nirvana-quant/"><img src="https://img.shields.io/pypi/dm/nirvana-quant?color=blue&logo=python&logoColor=white" alt="Downloads"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg?logo=python&logoColor=white" alt="Python Versions"></a>
+  <a href="nirvana_cpp/"><img src="https://img.shields.io/badge/C%2B%2B-20%20Header--Only-purple.svg?logo=cplusplus&logoColor=white" alt="C++20"></a>
+  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-green.svg" alt="License: GPL v3"></a>
+  <a href="https://colab.research.google.com/github/yinyusi65/nirvana-algorithm/blob/main/test_nirvana_netbank_full_pipeline.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
+</p>
 
 ---
 
-## Methodological Modules
+`nirvana-quant` is an open-source Python and C++ research framework for **multivariate time-series econometrics**, state-space filtering, directional network spillover modeling, and counterfactual panel reconstruction.
 
-The package provides six core mathematical modules:
+The library bridges classical econometric foundations (Vector Autoregressions, Diebold–Yılmaz connectedness, Kalman filters) with modern non-parametric methods (piecewise regression trees, Fisher Information regularization, and finite-sample Split Conformal Prediction).
+
+---
+
+## 🚀 Interactive Notebook Demo (1-Click Run)
+
+Test the complete end-to-end systemic risk pipeline across 27 commercial banks with interactive network graphs, SVD market decoupling, domino default contagion, and Basel IV macroprudential capital surcharge calibration:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yinyusi65/nirvana-algorithm/blob/main/test_nirvana_netbank_full_pipeline.ipynb)
+
+---
+
+## 📊 Visualizations & Topological Risk Analytics
+
+The engine extracts systemic interbank connections from multivariate asset price series:
+
+| Pairwise Spillover Intensity Heatmap (27x27) | Directed Systemic Risk Network Topology |
+| :---: | :---: |
+| <img src="banking_econometrics/nirvana_net_v2/output/banking_pairwise_spillover_heatmap.png" width="450"/> | <img src="banking_econometrics/nirvana_net_v2/output/banking_network_directed_topology.png" width="450"/> |
+
+| Net Transmitter vs. Receiver Ranking | Hub vs. Authority Scatterplot |
+| :---: | :---: |
+| <img src="banking_econometrics/nirvana_net_v2/output/banking_net_spillover_ranking.png" width="450"/> | <img src="banking_econometrics/nirvana_net_v2/output/banking_hub_vs_authority_scatter.png" width="450"/> |
+
+---
+
+## ⚡ Quickstart in 3 Lines
+
+```bash
+pip install nirvana-quant
+```
+
+```python
+import pandas as pd
+from nirvana import NirvanaConnectedness
+
+# Fit a TVP-VAR causal Kalman network model
+model = NirvanaConnectedness(kalman_q=1e-3, kalman_r=1e-2, orthogonalize_market=True)
+results = model.fit(df_asset_returns)
+
+print(f"Total Connectedness Index (TCI): {results.total_connectedness_index:.2f}%")
+print("Top Shock Transmitters:", results.top_transmitters[:5])
+print("Top Shock Receivers:", results.top_receivers[:5])
+```
+
+---
+
+## 🔬 Core Methodological Modules
 
 ### 1. Harmonic Feature Mapping (`nirvana.manifold`)
 * Maps multi-frequency cyclical signals (such as quarterly financial reporting and annual cycles) onto periodic manifold coordinates ($\mathbb{T}^2 = S^1 \times S^1$).
@@ -47,9 +94,9 @@ The package provides six core mathematical modules:
 
 ---
 
-## Domain Extensions (`nirvana.domains`)
+## 🏛️ Domain Extensions (`nirvana.domains`)
 
-Domain-specific conventions and structural parameters are maintained in modular extensions:
+Domain-specific structural parameters are maintained in modular extensions:
 
 * **`banking`**: Empirical asset-scaling adjustments, exchange price-band limits, and interbank liquidity position mappings for systemic risk studies.
 * **`cybersecurity`**: Directed network graph modeling for anomalous traffic flows and node centrality analysis.
@@ -57,7 +104,7 @@ Domain-specific conventions and structural parameters are maintained in modular 
 
 ---
 
-## C++ Implementation (`nirvana_cpp/`)
+## 💻 C++ Implementation (`nirvana_cpp/`)
 
 For low-latency execution and integration into compiled pipelines, the repository includes a self-contained C++20 header library:
 
@@ -67,9 +114,9 @@ For low-latency execution and integration into compiled pipelines, the repositor
 
 ---
 
-## Installation
+## 📦 Installation Options
 
-### From PyPI
+### From PyPI (Recommended)
 ```bash
 pip install nirvana-quant
 ```
@@ -88,37 +135,9 @@ pip install -e .
 
 ---
 
-## Usage Examples
+## 📖 Usage Examples
 
-### 1. Directional Spillover Analysis
-```python
-import numpy as np
-import pandas as pd
-from nirvana import NirvanaConnectedness
-
-# Simulated daily returns across N entities
-np.random.seed(42)
-T, N = 500, 5
-returns_df = pd.DataFrame(
-    np.random.randn(T, N),
-    columns=[f"Asset_{i}" for i in range(N)]
-)
-
-# Estimate directional connectedness network
-model = NirvanaConnectedness(
-    lags=[1, 2],
-    kalman_q=1e-3,
-    kalman_r=1e-2,
-    orthogonalize_market=True
-)
-results = model.fit(returns_df)
-
-print(f"Total Connectedness Index (TCI): {results.total_connectedness_index:.2f}%")
-print("Top Shock Transmitters:", results.top_transmitters)
-print("Top Shock Receivers:", results.top_receivers)
-```
-
-### 2. Two-Stage Regression with Conformal Prediction Intervals
+### 1. Two-Stage Regression with Conformal Prediction Intervals
 ```python
 import numpy as np
 from nirvana import NirvanaTwoStageRegressor
@@ -139,8 +158,8 @@ print(f"Point Forecast: {y_pred[0]:.3f}, 95% Interval: [{y_lower[0]:.3f}, {y_upp
 
 ---
 
-## Authors & Maintainers
+## 👤 Authors & Maintainers
 * **yinyusi65**
 
-## License
+## 📄 License
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.

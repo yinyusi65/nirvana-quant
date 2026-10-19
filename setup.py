@@ -12,7 +12,7 @@ setup(
     description="A Statistical and Econometric Framework for Multivariate Cyclical Time Series",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yinyusi65/nirvana-algorithm",
+    url="https://github.com/yinyusi65/nirvana-quant",
     packages=find_packages(include=["nirvana", "nirvana.*"]),
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -30,8 +30,8 @@ setup(
         "Operating System :: OS Independent",
     ],
     install_requires=[
-        "numpy>=1.22.0",
-        "pandas>=1.4.0",
+        "numpy>=1.22.0,<2.3.0",
+        "pandas>=1.4.0,<3.0.0",
         "scipy>=1.8.0",
     ],
     extras_require={

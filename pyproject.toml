@@ -19,14 +19,14 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
-    "numpy>=1.22.0",
-    "pandas>=1.4.0",
+    "numpy>=1.22.0,<2.3.0",
+    "pandas>=1.4.0,<3.0.0",
     "scipy>=1.8.0",
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/yinyusi65/nirvana-algorithm"
-"Bug Tracker" = "https://github.com/yinyusi65/nirvana-algorithm/issues"
+"Homepage" = "https://github.com/yinyusi65/nirvana-quant"
+"Bug Tracker" = "https://github.com/yinyusi65/nirvana-quant/issues"
 
 [tool.setuptools.packages.find]
 include = ["nirvana*"]

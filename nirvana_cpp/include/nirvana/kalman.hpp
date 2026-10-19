@@ -214,6 +214,120 @@ public:
     }
 };
 
+/**
+ * @brief Causal Kalman Time-Varying Parameter (TVP) Regressor.
+ * ============================================================
+ * State space:
+ *   Observation: y_t = x_t^T beta_t + v_t,        v_t ~ N(0, R)
+ *   Transition:  beta_t = phi * beta_{t-1} + w_t,   w_t ~ N(0, Q)
+ */
+class CausalKalmanTVPRegressor {
+public:
+    double q_diag_{1e-4};
+    double r_scalar_{1e-2};
+    double phi_{0.999};
+    bool fit_intercept_{true};
+
+    std::vector<double> beta_{};
+    Matrix P_{};
+    size_t n_features_{0};
+    bool fitted_{false};
+
+    CausalKalmanTVPRegressor(
+        double q_diag = 1e-4,
+        double r_scalar = 1e-2,
+        double phi = 0.999,
+        bool fit_intercept = true
+    ) : q_diag_(q_diag), r_scalar_(r_scalar), phi_(phi), fit_intercept_(fit_intercept) {}
+
+    void fit(const Matrix& X, const std::vector<double>& y) {
+        size_t N = X.rows();
+        size_t K = X.cols();
+        size_t d = fit_intercept_ ? (K + 1) : K;
+        n_features_ = d;
+
+        beta_.assign(d, 0.0);
+        P_ = Matrix::eye(d, 1.0);
+        Matrix Q = Matrix::eye(d, q_diag_);
+        double R = r_scalar_;
+
+        // Sequential online Kalman updates
+        for (size_t t = 0; t < N; ++t) {
+            std::vector<double> xt(d);
+            if (fit_intercept_) {
+                xt[0] = 1.0;
+                for (size_t j = 0; j < K; ++j) xt[j + 1] = X(t, j);
+            } else {
+                for (size_t j = 0; j < K; ++j) xt[j] = X(t, j);
+            }
+            double yt = y[t];
+
+            // 1. Prediction
+            std::vector<double> beta_pred(d);
+            for (size_t j = 0; j < d; ++j) beta_pred[j] = phi_ * beta_[j];
+            Matrix P_pred = P_ * (phi_ * phi_) + Q;
+
+            // 2. Innovation
+            double y_hat = 0.0;
+            for (size_t j = 0; j < d; ++j) y_hat += xt[j] * beta_pred[j];
+            double innov = yt - y_hat;
+
+            // xt^T * P_pred * xt
+            double xt_P_xt = 0.0;
+            std::vector<double> P_xt(d, 0.0);
+            for (size_t r = 0; r < d; ++r) {
+                for (size_t c = 0; c < d; ++c) {
+                    P_xt[r] += P_pred(r, c) * xt[c];
+                }
+                xt_P_xt += xt[r] * P_xt[r];
+            }
+            double S = std::max(1e-8, xt_P_xt + R);
+
+            // 3. Kalman Gain K = P_pred * xt / S
+            std::vector<double> K_gain(d);
+            for (size_t j = 0; j < d; ++j) K_gain[j] = P_xt[j] / S;
+
+            // 4. State Update
+            for (size_t j = 0; j < d; ++j) beta_[j] = beta_pred[j] + K_gain[j] * innov;
+
+            // Joseph covariance update: P = (I - K xt^T) P_pred (I - K xt^T)^T + K R K^T
+            Matrix I_Kx = Matrix::eye(d);
+            for (size_t r = 0; r < d; ++r) {
+                for (size_t c = 0; c < d; ++c) {
+                    I_Kx(r, c) -= K_gain[r] * xt[c];
+                }
+            }
+            Matrix P_new = I_Kx * P_pred * I_Kx.transpose();
+            for (size_t r = 0; r < d; ++r) {
+                for (size_t c = 0; c < d; ++c) {
+                    P_new(r, c) += K_gain[r] * K_gain[c] * R;
+                }
+            }
+            P_ = P_new * 0.5 + P_new.transpose() * 0.5;
+        }
+        fitted_ = true;
+    }
+
+    std::vector<double> predict(const Matrix& X) const {
+        if (!fitted_) throw std::runtime_error("CausalKalmanTVPRegressor is not fitted.");
+        size_t N = X.rows();
+        size_t K = X.cols();
+        std::vector<double> preds(N, 0.0);
+
+        for (size_t i = 0; i < N; ++i) {
+            double p = 0.0;
+            if (fit_intercept_) {
+                p += beta_[0];
+                for (size_t j = 0; j < K; ++j) p += X(i, j) * beta_[j + 1];
+            } else {
+                for (size_t j = 0; j < K; ++j) p += X(i, j) * beta_[j];
+            }
+            preds[i] = p;
+        }
+        return preds;
+    }
+};
+
 } // namespace nirvana
 
 #endif // NIRVANA_KALMAN_HPP

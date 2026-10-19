@@ -11,7 +11,7 @@ License: MIT / Academic Research
 __version__ = "1.0.0"
 
 from .manifold import Base12Manifold, DualClockCoordinates
-from .kalman import CausalOnlineKalman, MultivariateCausalKalman
+from .kalman import CausalOnlineKalman, MultivariateCausalKalman, CausalKalmanTVPRegressor
 from .tree import NirvanaTreeEngine, TrainingSample
 from .network import (
     NirvanaConnectedness,

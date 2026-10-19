@@ -315,6 +315,7 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         sign_constraints: Optional[Dict[Union[int, str], int]] = None,
         factor_compression: bool = False,
         n_components: Optional[int] = None,
+        manifold_lstr: bool = False,
     ):
         self.base_estimator = base_estimator
         self.cancer_sensitivity = cancer_sensitivity
@@ -327,11 +328,12 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         self.min_samples_split = min_samples_split
         self.min_samples_leaf = min_samples_leaf
         self.hierarchical_shrinkage = hierarchical_shrinkage
-        self.soft_splits = soft_splits
+        self.soft_splits = soft_splits or manifold_lstr
         self.transition_gamma = transition_gamma
         self.sign_constraints = sign_constraints
         self.factor_compression = factor_compression
         self.n_components = n_components
+        self.manifold_lstr = manifold_lstr
 
         self.fitted_base_estimator_: Any = None
         self.tree_engine_: Optional[NirvanaTreeRegressor] = None
@@ -339,6 +341,7 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         self.feature_names_: List[str] = []
         self.pca_mean_: Optional[np.ndarray] = None
         self.pca_components_: Optional[np.ndarray] = None
+        self.conformal_residuals_: Optional[np.ndarray] = None
         self.report_: Optional[StaticEconometricReport] = None
 
     def fit(self, X: Union[np.ndarray, pd.DataFrame], y: Union[np.ndarray, pd.Series]):
@@ -408,6 +411,9 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
                 base = Lasso(alpha=0.01)
             elif est_name == "elasticnet":
                 base = ElasticNet(alpha=0.01, l1_ratio=0.5)
+            elif est_name in ("kalman", "tvp"):
+                from .kalman import CausalKalmanTVPRegressor
+                base = CausalKalmanTVPRegressor()
             else:
                 base = LinearRegression()
             base.fit(X_reg, y_vec)
@@ -444,6 +450,7 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         residuals_pred_phase2 = self.tree_engine_.predict(X_mat)
         y_pred_final = y_pred_phase1 + self.learning_rate * residuals_pred_phase2
         residuals_final = y_vec - y_pred_final
+        self.conformal_residuals_ = np.abs(residuals_final)
 
         ss_res_final = float(np.sum(residuals_final ** 2))
         r2_phase2 = max(0.0, float(1.0 - ss_res_final / max(ss_tot, 1e-12)))
@@ -540,6 +547,62 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
 
         residuals_pred_phase2 = self.tree_engine_.predict(X_mat)
         return y_pred_base + self.learning_rate * residuals_pred_phase2
+
+    def predict_interval(
+        self,
+        X: Union[np.ndarray, pd.DataFrame],
+        alpha: float = 0.05,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Split Conformal Prediction Interval with Distribution-Free Finite-Sample Guarantee.
+        ==================================================================================
+        Guarantees: P(Y_true in [Y_lower, Y_upper]) >= 1 - alpha.
+
+        Parameters
+        ----------
+        X : Union[np.ndarray, pd.DataFrame]
+            Input feature matrix.
+        alpha : float, default=0.05
+            Significance level (e.g. 0.05 for 95% coverage interval).
+
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray, np.ndarray]
+            (y_pred, y_lower, y_upper)
+        """
+        y_pred = self.predict(X)
+        if self.conformal_residuals_ is None or len(self.conformal_residuals_) == 0:
+            return y_pred, y_pred, y_pred
+
+        n_cal = len(self.conformal_residuals_)
+        # Finite-sample exact quantile index: ceil((n + 1) * (1 - alpha)) / n
+        q_level = min(1.0, np.ceil((n_cal + 1) * (1.0 - alpha)) / n_cal)
+        q = float(np.quantile(self.conformal_residuals_, q_level))
+
+        y_lower = y_pred - q
+        y_upper = y_pred + q
+        return y_pred, y_lower, y_upper
+
+    def evaluate_conformal_coverage(
+        self,
+        X_test: Union[np.ndarray, pd.DataFrame],
+        y_test: Union[np.ndarray, pd.Series],
+        alpha: float = 0.05,
+    ) -> Dict[str, float]:
+        """
+        Evaluate empirical coverage and average interval width on test set.
+        """
+        y_vec = np.asarray(getattr(y_test, "values", y_test), dtype=float).ravel()
+        y_pred, y_lower, y_upper = self.predict_interval(X_test, alpha=alpha)
+        covered = (y_vec >= y_lower) & (y_vec <= y_upper)
+        coverage_rate = float(np.mean(covered))
+        avg_width = float(np.mean(y_upper - y_lower))
+        return {
+            "target_coverage": float(1.0 - alpha),
+            "empirical_coverage": coverage_rate,
+            "average_interval_width": avg_width,
+            "conformal_quantile_q": float(np.mean(y_upper - y_pred)),
+        }
 
     def score(self, X: Union[np.ndarray, pd.DataFrame], y: Union[np.ndarray, pd.Series]) -> float:
         y_vec = np.asarray(getattr(y, "values", y), dtype=float).ravel()

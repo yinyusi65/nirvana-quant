@@ -33,6 +33,7 @@ test_*.py
 *_test*.py
 tests/
 test/
+*benchmark*.py
 nirvana_cpp/tests/
 
 # Local Demos, Application Datasets & Domain Experiments

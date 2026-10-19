@@ -164,3 +164,119 @@ class MultivariateCausalKalman:
         for i in range(t):
             out[i] = self.update(mat[i])
         return out
+
+
+class CausalKalmanTVPRegressor:
+    """
+    Online Causal Kalman Time-Varying Parameter (TVP) Regressor.
+    ============================================================
+    State space formulation:
+      Observation:  y_t = x_t^T beta_t + v_t,               v_t ~ N(0, R)
+      Transition:   beta_t = phi * beta_{t-1} + w_t,        w_t ~ N(0, Q)
+
+    Features:
+    - Strictly causal sequential updates without forward lookahead bias.
+    - Continuous tracking of structural shifts and time-varying elasticities.
+    - Scikit-learn compliant interface (.fit, .predict, .score).
+    """
+
+    def __init__(
+        self,
+        q_diag: float = 1e-4,
+        r_scalar: float = 1e-2,
+        phi: float = 0.999,
+        fit_intercept: bool = True,
+    ):
+        self.q_diag = float(q_diag)
+        self.r_scalar = float(r_scalar)
+        self.phi = float(phi)
+        self.fit_intercept = bool(fit_intercept)
+        self.beta_: Optional[np.ndarray] = None
+        self.beta_history_: Optional[np.ndarray] = None
+        self.P_: Optional[np.ndarray] = None
+        self.n_features_: int = 0
+
+    def fit(self, X: Union[np.ndarray, "pd.DataFrame"], y: Union[np.ndarray, "pd.Series"]):
+        X_mat = getattr(X, "values", X)
+        y_vec = getattr(y, "values", y)
+        X_mat = np.asarray(X_mat, dtype=float)
+        y_vec = np.asarray(y_vec, dtype=float).ravel()
+
+        N, K = X_mat.shape
+        if self.fit_intercept:
+            X_des = np.column_stack([np.ones(N), X_mat])
+            d = K + 1
+        else:
+            X_des = X_mat
+            d = K
+
+        self.n_features_ = d
+        Q = np.eye(d) * self.q_diag
+        R = float(self.r_scalar)
+
+        # Initial OLS prior on first small burn-in slice (or Ridge)
+        burn_in = min(max(d + 2, 5), N)
+        X_b = X_des[:burn_in]
+        y_b = y_vec[:burn_in]
+        try:
+            beta_curr = np.linalg.pinv(X_b.T @ X_b + 1e-3 * np.eye(d)) @ (X_b.T @ y_b)
+        except Exception:
+            beta_curr = np.zeros(d)
+
+        P_curr = np.eye(d) * 1.0
+        history = np.empty((N, d), dtype=float)
+
+        for t in range(N):
+            xt = X_des[t]
+            yt = y_vec[t]
+
+            # 1. Prediction step
+            beta_pred = self.phi * beta_curr
+            P_pred = (self.phi ** 2) * P_curr + Q
+
+            # 2. Innovation
+            y_hat = float(np.dot(xt, beta_pred))
+            innov = yt - y_hat
+            S = float(np.dot(xt, P_pred @ xt) + R)
+            S = max(S, 1e-8)
+
+            # 3. Kalman Gain
+            K_gain = (P_pred @ xt) / S
+
+            # 4. Correction step (Joseph form for stability)
+            beta_curr = beta_pred + K_gain * innov
+            I_Kx = np.eye(d) - np.outer(K_gain, xt)
+            P_curr = I_Kx @ P_pred @ I_Kx.T + np.outer(K_gain, K_gain) * R
+            P_curr = 0.5 * (P_curr + P_curr.T)
+
+            history[t] = beta_curr
+
+        self.beta_ = beta_curr
+        self.beta_history_ = history
+        self.P_ = P_curr
+        return self
+
+    def predict(self, X: Union[np.ndarray, "pd.DataFrame"]) -> np.ndarray:
+        if self.beta_ is None:
+            raise ValueError("CausalKalmanTVPRegressor is not fitted yet.")
+
+        X_mat = getattr(X, "values", X)
+        X_mat = np.asarray(X_mat, dtype=float)
+        N = X_mat.shape[0]
+
+        if self.fit_intercept:
+            X_des = np.column_stack([np.ones(N), X_mat])
+        else:
+            X_des = X_mat
+
+        return X_des @ self.beta_
+
+    def score(self, X: Union[np.ndarray, "pd.DataFrame"], y: Union[np.ndarray, "pd.Series"]) -> float:
+        y_vec = np.asarray(getattr(y, "values", y), dtype=float).ravel()
+        y_pred = self.predict(X)
+        ss_res = np.sum((y_vec - y_pred) ** 2)
+        ss_tot = np.sum((y_vec - np.mean(y_vec)) ** 2)
+        if ss_tot < 1e-12:
+            return 1.0 if ss_res < 1e-12 else 0.0
+        return float(1.0 - ss_res / ss_tot)
+

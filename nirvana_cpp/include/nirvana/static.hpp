@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "tree.hpp"
+#include "kalman.hpp"
 #include <vector>
 #include <string>
 #include <sstream>
@@ -283,7 +284,17 @@ struct MultiverseInvarianceReport {
 };
 
 /**
- * @brief Two-Stage Econometric Regressor: Phase 1 OLS + Phase 2 Apoptosis Tree.
+ * @brief Distribution-Free Conformal Prediction Interval with Finite-Sample Guarantee.
+ */
+struct ConformalInterval {
+    double pred{0.0};
+    double lower{0.0};
+    double upper{0.0};
+    double half_width{0.0};
+};
+
+/**
+ * @brief Two-Stage Econometric Regressor: Phase 1 (OLS or Causal Kalman TVP) + Phase 2 (Apoptosis Tree / Manifold LSTR).
  */
 class NirvanaTwoStageRegressor {
 public:
@@ -294,7 +305,12 @@ public:
     bool soft_splits_{false};
     double transition_gamma_{3.0};
     size_t min_samples_leaf_{1};
+    std::string base_estimator_{"ols"};
+    bool manifold_lstr_{false};
     std::vector<int> sign_constraints_{};
+    std::vector<double> beta_{};
+    CausalKalmanTVPRegressor tvp_regressor_{};
+    std::vector<double> conformal_residuals_{};
     NirvanaTreeEngine tree_engine_{};
     StataRegressionReport base_report_{};
 
@@ -304,151 +320,180 @@ public:
                                      double hierarchical_shrinkage = 0.0,
                                      bool soft_splits = false,
                                      double transition_gamma = 3.0,
-                                     size_t min_samples_leaf = 1)
+                                     size_t min_samples_leaf = 1,
+                                     std::string base_estimator = "ols",
+                                     bool manifold_lstr = false)
         : max_depth_(max_depth),
           apoptosis_start_depth_(apoptosis_start_depth),
           cancer_sensitivity_(cancer_sensitivity),
           hierarchical_shrinkage_(hierarchical_shrinkage),
-          soft_splits_(soft_splits),
+          soft_splits_(soft_splits || manifold_lstr),
           transition_gamma_(transition_gamma),
           min_samples_leaf_(min_samples_leaf),
-          tree_engine_(cancer_sensitivity, 0.5, hierarchical_shrinkage, soft_splits, transition_gamma, min_samples_leaf) {}
+          base_estimator_(base_estimator),
+          manifold_lstr_(manifold_lstr),
+          tree_engine_(cancer_sensitivity, 0.5, hierarchical_shrinkage, soft_splits || manifold_lstr, transition_gamma, min_samples_leaf) {}
 
     /**
-     * @brief Fit OLS on X -> compute residuals -> train Phase 2 tree on residuals.
+     * @brief Fit Base Model (OLS or Causal Kalman) -> compute residuals -> train Phase 2 tree on residuals.
      */
     void fit(const Matrix& X, const std::vector<double>& y, const std::vector<std::string>& feature_names = {}) {
         size_t N = X.rows();
         size_t K = X.cols();
         if (N != y.size()) throw std::invalid_argument("X and y dimension mismatch.");
 
-        // 1. Build design matrix with intercept [1, X]
-        Matrix X_des(N, K + 1);
-        for (size_t i = 0; i < N; ++i) {
-            X_des(i, 0) = 1.0;
-            for (size_t j = 0; j < K; ++j) {
-                X_des(i, j + 1) = X(i, j);
-            }
-        }
-
-        // 2. Fit Phase 1 OLS: beta = (X^T * X)^(-1) * X^T * y
-        Matrix Xt = X_des.transpose();
-        Matrix XtX = Xt * X_des;
-        Matrix invXtX = XtX.inverse(1e-8);
-        Matrix y_mat(N, 1, y);
-        Matrix beta = invXtX * (Xt * y_mat);
-
-        // Enforce economic sign constraints via coordinate descent
-        if (!sign_constraints_.empty()) {
-            for (int iter = 0; iter < 50; ++iter) {
-                for (size_t j = 1; j <= K; ++j) {
-                    size_t f_idx = j - 1;
-                    if (f_idx < sign_constraints_.size() && sign_constraints_[f_idx] != 0) {
-                        int s = sign_constraints_[f_idx];
-                        double r_j = 0.0;
-                        for (size_t i = 0; i < N; ++i) {
-                            r_j += X_des(i, j) * y[i];
-                        }
-                        for (size_t m = 0; m <= K; ++m) {
-                            if (m != j) r_j -= XtX(j, m) * beta(m, 0);
-                        }
-                        double new_b = r_j / std::max(1e-12, XtX(j, j));
-                        if (s > 0) new_b = std::max(0.0, new_b);
-                        else if (s < 0) new_b = std::min(0.0, new_b);
-                        beta(j, 0) = new_b;
-                    }
-                }
-            }
-        }
-
-        // Compute residuals and statistics
         std::vector<double> y_hat(N, 0.0);
         std::vector<double> residuals(N, 0.0);
         double ss_resid = 0.0, sum_y = 0.0;
-        for (size_t i = 0; i < N; ++i) {
-            double pred = 0.0;
-            for (size_t j = 0; j <= K; ++j) {
-                pred += X_des(i, j) * beta(j, 0);
+
+        if (base_estimator_ == "kalman") {
+            tvp_regressor_.fit(X, y);
+            y_hat = tvp_regressor_.predict(X);
+            for (size_t i = 0; i < N; ++i) {
+                residuals[i] = y[i] - y_hat[i];
+                ss_resid += residuals[i] * residuals[i];
+                sum_y += y[i];
             }
-            y_hat[i] = pred;
-            residuals[i] = y[i] - pred;
-            ss_resid += residuals[i] * residuals[i];
-            sum_y += y[i];
+            double mean_y = sum_y / static_cast<double>(N);
+            double ss_total = 0.0;
+            for (size_t i = 0; i < N; ++i) ss_total += (y[i] - mean_y) * (y[i] - mean_y);
+            base_report_.n_obs = N;
+            base_report_.df_model = K;
+            base_report_.df_resid = (N > K + 1) ? (N - K - 1) : 1;
+            base_report_.r_squared = std::max(0.0, std::min(1.0, 1.0 - ss_resid / std::max(ss_total, 1e-12)));
+            base_report_.root_mse = std::sqrt(ss_resid / static_cast<double>(base_report_.df_resid));
+            base_report_.ss_resid = ss_resid;
+            base_report_.ss_total = ss_total;
+            base_report_.is_reset_cured = true;
+        } else {
+            // 1. Build design matrix with intercept [1, X]
+            Matrix X_des(N, K + 1);
+            for (size_t i = 0; i < N; ++i) {
+                X_des(i, 0) = 1.0;
+                for (size_t j = 0; j < K; ++j) {
+                    X_des(i, j + 1) = X(i, j);
+                }
+            }
+
+            // 2. Fit Phase 1 OLS: beta = (X^T * X)^(-1) * X^T * y
+            Matrix Xt = X_des.transpose();
+            Matrix XtX = Xt * X_des;
+            Matrix invXtX = XtX.inverse(1e-8);
+            Matrix y_mat(N, 1, y);
+            Matrix beta_mat = invXtX * (Xt * y_mat);
+            beta_.assign(K + 1, 0.0);
+            for (size_t j = 0; j <= K; ++j) beta_[j] = beta_mat(j, 0);
+
+            // Enforce economic sign constraints via coordinate descent
+            if (!sign_constraints_.empty()) {
+                for (int iter = 0; iter < 50; ++iter) {
+                    for (size_t j = 1; j <= K; ++j) {
+                        size_t f_idx = j - 1;
+                        if (f_idx < sign_constraints_.size() && sign_constraints_[f_idx] != 0) {
+                            int s = sign_constraints_[f_idx];
+                            double r_j = 0.0;
+                            for (size_t i = 0; i < N; ++i) {
+                                r_j += X_des(i, j) * y[i];
+                            }
+                            for (size_t m = 0; m <= K; ++m) {
+                                if (m != j) r_j -= XtX(j, m) * beta_[m];
+                            }
+                            double new_b = r_j / std::max(1e-12, XtX(j, j));
+                            if (s > 0) new_b = std::max(0.0, new_b);
+                            else if (s < 0) new_b = std::min(0.0, new_b);
+                            beta_[j] = new_b;
+                        }
+                    }
+                }
+            }
+
+            // Compute residuals and statistics
+            for (size_t i = 0; i < N; ++i) {
+                double pred = beta_[0];
+                for (size_t j = 0; j < K; ++j) {
+                    pred += X(i, j) * beta_[j + 1];
+                }
+                y_hat[i] = pred;
+                residuals[i] = y[i] - pred;
+                ss_resid += residuals[i] * residuals[i];
+                sum_y += y[i];
+            }
+
+            double mean_y = sum_y / static_cast<double>(N);
+            double ss_total = 0.0;
+            for (size_t i = 0; i < N; ++i) {
+                ss_total += (y[i] - mean_y) * (y[i] - mean_y);
+            }
+            double ss_model = std::max(0.0, ss_total - ss_resid);
+            double r2 = std::max(0.0, std::min(1.0, 1.0 - ss_resid / std::max(ss_total, 1e-12)));
+            size_t df_model = K;
+            size_t df_resid = (N > K + 1) ? (N - K - 1) : 1;
+            double adj_r2 = 1.0 - (1.0 - r2) * (static_cast<double>(N - 1) / static_cast<double>(df_resid));
+            double s2 = ss_resid / static_cast<double>(df_resid);
+
+            double f_stat = (ss_model / static_cast<double>(df_model)) / std::max(s2, 1e-12);
+            double f_p = f_to_p_value(f_stat, static_cast<int>(df_model), static_cast<int>(df_resid));
+
+            base_report_.n_obs = N;
+            base_report_.df_model = df_model;
+            base_report_.df_resid = df_resid;
+            base_report_.r_squared = r2;
+            base_report_.adj_r_squared = adj_r2;
+            base_report_.f_stat = f_stat;
+            base_report_.f_p_value = f_p;
+            base_report_.ss_model = ss_model;
+            base_report_.ss_resid = ss_resid;
+            base_report_.ss_total = ss_total;
+            base_report_.root_mse = std::sqrt(s2);
+
+            base_report_.var_names.clear();
+            base_report_.coefficients.clear();
+            base_report_.std_errors.clear();
+            base_report_.t_stats.clear();
+            base_report_.p_values.clear();
+            base_report_.ci_lower.clear();
+            base_report_.ci_upper.clear();
+
+            for (size_t j = 0; j <= K; ++j) {
+                std::string name = (j == 0) ? "_cons" : ((j - 1 < feature_names.size()) ? feature_names[j - 1] : ("X" + std::to_string(j - 1)));
+                base_report_.var_names.push_back(name);
+                double c = beta_[j];
+                double se = std::sqrt(std::max(1e-12, s2 * invXtX(j, j)));
+                double t = c / se;
+                double p = t_to_p_value(t, static_cast<int>(df_resid));
+                base_report_.coefficients.push_back(c);
+                base_report_.std_errors.push_back(se);
+                base_report_.t_stats.push_back(t);
+                base_report_.p_values.push_back(p);
+                base_report_.ci_lower.push_back(c - 1.96 * se);
+                base_report_.ci_upper.push_back(c + 1.96 * se);
+            }
+
+            // Ramsey RESET on Base OLS
+            Matrix X_reset(N, K + 3);
+            for (size_t i = 0; i < N; ++i) {
+                X_reset(i, 0) = 1.0;
+                for (size_t j = 0; j < K; ++j) X_reset(i, j + 1) = X(i, j);
+                X_reset(i, K + 1) = y_hat[i] * y_hat[i];
+                X_reset(i, K + 2) = y_hat[i] * y_hat[i] * y_hat[i];
+            }
+            Matrix Xt_r = X_reset.transpose();
+            Matrix b_reset = (Xt_r * X_reset).inverse(1e-8) * (Xt_r * y_mat);
+            double ss_resid_reset = 0.0;
+            for (size_t i = 0; i < N; ++i) {
+                double p_r = 0.0;
+                for (size_t j = 0; j < K + 3; ++j) p_r += X_reset(i, j) * b_reset(j, 0);
+                double diff = y[i] - p_r;
+                ss_resid_reset += diff * diff;
+            }
+            size_t df_reset_res = (N > K + 3) ? (N - K - 3) : 1;
+            double f_reset = ((ss_resid - ss_resid_reset) / 2.0) / std::max(1e-12, ss_resid_reset / static_cast<double>(df_reset_res));
+            base_report_.ramsey_reset_f = std::max(0.0, f_reset);
+            base_report_.ramsey_reset_p_value = f_to_p_value(base_report_.ramsey_reset_f, 2, static_cast<int>(df_reset_res));
+            base_report_.is_reset_cured = (base_report_.ramsey_reset_p_value > 0.05);
         }
 
-        double mean_y = sum_y / static_cast<double>(N);
-        double ss_total = 0.0;
-        for (size_t i = 0; i < N; ++i) {
-            ss_total += (y[i] - mean_y) * (y[i] - mean_y);
-        }
-        double ss_model = std::max(0.0, ss_total - ss_resid);
-        double r2 = std::max(0.0, std::min(1.0, 1.0 - ss_resid / std::max(ss_total, 1e-12)));
-        size_t df_model = K;
-        size_t df_resid = (N > K + 1) ? (N - K - 1) : 1;
-        double adj_r2 = 1.0 - (1.0 - r2) * (static_cast<double>(N - 1) / static_cast<double>(df_resid));
-        double s2 = ss_resid / static_cast<double>(df_resid);
-
-        double f_stat = (ss_model / static_cast<double>(df_model)) / std::max(s2, 1e-12);
-        double f_p = f_to_p_value(f_stat, static_cast<int>(df_model), static_cast<int>(df_resid));
-
-        base_report_.n_obs = N;
-        base_report_.df_model = df_model;
-        base_report_.df_resid = df_resid;
-        base_report_.r_squared = r2;
-        base_report_.adj_r_squared = adj_r2;
-        base_report_.f_stat = f_stat;
-        base_report_.f_p_value = f_p;
-        base_report_.ss_model = ss_model;
-        base_report_.ss_resid = ss_resid;
-        base_report_.ss_total = ss_total;
-        base_report_.root_mse = std::sqrt(s2);
-
-        base_report_.var_names.clear();
-        base_report_.coefficients.clear();
-        base_report_.std_errors.clear();
-        base_report_.t_stats.clear();
-        base_report_.p_values.clear();
-        base_report_.ci_lower.clear();
-        base_report_.ci_upper.clear();
-
-        for (size_t j = 0; j <= K; ++j) {
-            std::string name = (j == 0) ? "_cons" : ((j - 1 < feature_names.size()) ? feature_names[j - 1] : ("X" + std::to_string(j - 1)));
-            base_report_.var_names.push_back(name);
-            double c = beta(j, 0);
-            double se = std::sqrt(std::max(1e-12, s2 * invXtX(j, j)));
-            double t = c / se;
-            double p = t_to_p_value(t, static_cast<int>(df_resid));
-            base_report_.coefficients.push_back(c);
-            base_report_.std_errors.push_back(se);
-            base_report_.t_stats.push_back(t);
-            base_report_.p_values.push_back(p);
-            base_report_.ci_lower.push_back(c - 1.96 * se);
-            base_report_.ci_upper.push_back(c + 1.96 * se);
-        }
-
-        // Ramsey RESET on Base OLS
-        Matrix X_reset(N, K + 3);
-        for (size_t i = 0; i < N; ++i) {
-            for (size_t j = 0; j <= K; ++j) X_reset(i, j) = X_des(i, j);
-            X_reset(i, K + 1) = y_hat[i] * y_hat[i];
-            X_reset(i, K + 2) = y_hat[i] * y_hat[i] * y_hat[i];
-        }
-        Matrix Xt_r = X_reset.transpose();
-        Matrix b_reset = (Xt_r * X_reset).inverse(1e-8) * (Xt_r * y_mat);
-        double ss_resid_reset = 0.0;
-        for (size_t i = 0; i < N; ++i) {
-            double p_r = 0.0;
-            for (size_t j = 0; j < K + 3; ++j) p_r += X_reset(i, j) * b_reset(j, 0);
-            double diff = y[i] - p_r;
-            ss_resid_reset += diff * diff;
-        }
-        size_t df_reset_res = (N > K + 3) ? (N - K - 3) : 1;
-        double f_reset = ((ss_resid - ss_resid_reset) / 2.0) / std::max(1e-12, ss_resid_reset / static_cast<double>(df_reset_res));
-        base_report_.ramsey_reset_f = std::max(0.0, f_reset);
-        base_report_.ramsey_reset_p_value = f_to_p_value(base_report_.ramsey_reset_f, 2, static_cast<int>(df_reset_res));
-        base_report_.is_reset_cured = (base_report_.ramsey_reset_p_value > 0.05);
-
-        // 3. Phase 2: Train Tree Engine on OLS Residuals
+        // 3. Phase 2: Train Tree Engine on Residuals
         std::vector<TrainingSample> tree_samples(N);
         for (size_t i = 0; i < N; ++i) {
             tree_samples[i].features.resize(K);
@@ -466,6 +511,71 @@ public:
         tree_engine_.min_samples_leaf_ = min_samples_leaf_;
         tree_engine_.sign_constraints_ = sign_constraints_;
         tree_engine_.train(tree_samples);
+
+        // 4. Compute Conformal Calibration Residuals
+        conformal_residuals_.resize(N);
+        for (size_t i = 0; i < N; ++i) {
+            double final_pred = predict_sample(X.row(i));
+            conformal_residuals_[i] = std::abs(y[i] - final_pred);
+        }
+        std::sort(conformal_residuals_.begin(), conformal_residuals_.end());
+    }
+
+    double predict_sample(const std::vector<double>& x) const {
+        double base_pred = 0.0;
+        if (base_estimator_ == "kalman") {
+            Matrix x_mat(1, x.size(), x);
+            base_pred = tvp_regressor_.predict(x_mat)[0];
+        } else if (!beta_.empty()) {
+            base_pred = beta_[0];
+            for (size_t j = 0; j < x.size(); ++j) {
+                base_pred += x[j] * beta_[j + 1];
+            }
+        }
+        return base_pred + tree_engine_.predict(x);
+    }
+
+    std::vector<double> predict(const Matrix& X) const {
+        size_t N = X.rows();
+        std::vector<double> preds(N);
+        for (size_t i = 0; i < N; ++i) {
+            preds[i] = predict_sample(X.row(i));
+        }
+        return preds;
+    }
+
+    ConformalInterval predict_interval(const std::vector<double>& x, double alpha = 0.05) const {
+        double pred = predict_sample(x);
+        if (conformal_residuals_.empty()) {
+            return ConformalInterval{pred, pred, pred, 0.0};
+        }
+        size_t n = conformal_residuals_.size();
+        size_t idx = static_cast<size_t>(std::ceil((n + 1) * (1.0 - alpha))) - 1;
+        idx = std::min(idx, n - 1);
+        double q = conformal_residuals_[idx];
+        return ConformalInterval{pred, pred - q, pred + q, q};
+    }
+
+    std::vector<ConformalInterval> predict_intervals(const Matrix& X, double alpha = 0.05) const {
+        size_t N = X.rows();
+        std::vector<ConformalInterval> intervals(N);
+        for (size_t i = 0; i < N; ++i) {
+            intervals[i] = predict_interval(X.row(i), alpha);
+        }
+        return intervals;
+    }
+
+    double evaluate_conformal_coverage(const Matrix& X_test, const std::vector<double>& y_test, double alpha = 0.05) const {
+        size_t N = X_test.rows();
+        if (N == 0) return 0.0;
+        size_t covered = 0;
+        for (size_t i = 0; i < N; ++i) {
+            ConformalInterval ci = predict_interval(X_test.row(i), alpha);
+            if (y_test[i] >= ci.lower && y_test[i] <= ci.upper) {
+                covered++;
+            }
+        }
+        return static_cast<double>(covered) / static_cast<double>(N);
     }
 
     /**

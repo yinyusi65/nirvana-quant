@@ -1,76 +1,86 @@
-# ☸ NIRVANA QUANT C++20 ENGINE
-> **Chrono-Cancer Meta-Architecture for High-Dimensional Lead-Lag Dynamical Systems**  
-> *Zero-dependency, Header-Only, Institutional-Grade C++20 Quantitative Engine.*
+# Nirvana C++20 Header-Only Library
+
+[![C++ Standard](https://img.shields.io/badge/C%2B%2B-20%20Header--Only-purple.svg)](include/nirvana/)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../LICENSE)
+
+`nirvana_cpp` is a self-contained, header-only C++20 implementation of the **Nirvana** econometric and statistical time-series framework. It provides identical mathematical routines to the Python engine while optimizing for execution speed, zero external dependencies, and minimal memory overhead.
 
 ---
 
-## 🏛️ 1. Architecture Overview
+## Architecture
 
-`nirvana_cpp` is a high-performance C++20 reimplementation of the Nirvana Quant framework. Designed for ultra-low latency, mission-critical algorithmic stability, and cross-platform portability without external dependencies (no BLAS, LAPACK, Eigen, or Boost required).
+The C++ library contains self-contained header modules organized under `include/nirvana/`:
 
 ```
 nirvana_cpp/
 ├── include/nirvana/
-│   ├── nirvana.hpp      # Umbrella master header
-│   ├── types.hpp        # Contiguous Matrix, Ridge Pinv, Truncated SVD, Linear Algebra
-│   ├── manifold.hpp     # Dual-Clock Base-12 Torus Manifold (S¹ x S¹) & DFT Period Estimator
-│   ├── kalman.hpp       # Multivariate Causal Kalman Filter with Huber Innovation Clipping
-│   ├── tree.hpp         # 12-layer Tree with Empirical Fisher Information & Apoptosis Pruning
-│   ├── network.hpp      # Directional Connectedness, SVD Multi-Factor Beta, HITS Hub/Authority
-│   ├── multiverse.hpp   # Multiverse Ensemble Reconstructor & Cubic Hermite Boundary Ramp
-│   └── static.hpp       # Two-Stage Regressor, Ramsey RESET & Multiverse Invariant Screening
-└── CMakeLists.txt       # Modern CMake interface library target
+│   ├── nirvana.hpp      # Primary aggregate header
+│   ├── types.hpp        # Contiguous matrix algebra, SVD, and pseudoinverse routines
+│   ├── manifold.hpp     # Toroidal feature projections and spectral frequency estimation
+│   ├── kalman.hpp       # Causal state-space Kalman filter and TVP regression
+│   ├── tree.hpp         # Piecewise regression trees with Fisher Information pruning
+│   ├── network.hpp      # Directional connectedness, GFEVD, and Kleinberg graph centrality
+│   ├── multiverse.hpp   # Counterfactual path synthesis and Hermite boundary interpolation
+│   └── static.hpp       # Two-stage additive regression and conformal prediction intervals
+└── CMakeLists.txt       # CMake interface library target
 ```
 
 ---
 
-## ⚡ 2. Core Mathematical Pillars
+## Mathematical Components
 
-### A. Base-12 Manifold Harmonics (`manifold.hpp`)
-Maps asynchronous calendar ticks and discrete volume/information quantities onto a 2-Torus $\mathbb{T}^2 = S^1 \times S^1$:
-$$\theta_{\text{macro}} = \frac{2\pi \cdot (t \pmod P)}{P}, \quad \theta_{\text{micro}} = \frac{2\pi \cdot (\lfloor V / V_q \rfloor \pmod{12})}{12}$$
-$$\gamma(t) = \cos(\theta_{\text{macro}} - \theta_{\text{micro}})$$
+### 1. Matrix Algebra & Decompositions (`types.hpp`)
+* Implements cache-friendly contiguous dynamic arrays (`Matrix`, `Vector`).
+* Zero external linear algebra dependencies: includes Gauss–Jordan inversion, Ridge regularized pseudoinverse, and deflated truncated Singular Value Decomposition (SVD).
 
-### B. Multivariate Causal Kalman Filter with Huber Bounding (`kalman.hpp`)
-Prevents explosive covariance degradation during fat-tailed market shocks via Joseph stabilized covariance updates and Huber-clipped innovations:
-$$\tilde{y}_k = z_k - H \hat{x}_{k|k-1}, \quad \tilde{y}_{k, \text{clipped}} = \text{clamp}\left(\frac{\tilde{y}_k}{\sigma_S}, -\tau, \tau\right) \cdot \sigma_S$$
-$$P_k = (I - K H) P_{k|k-1} (I - K H)^T + K R K^T$$
+### 2. Harmonic Manifold Mapping (`manifold.hpp`)
+* Projects temporal and discrete activity indicators onto a 2-Torus $\mathbb{T}^2 = S^1 \times S^1$:
+  $$\theta_{\text{macro}} = \frac{2\pi \cdot (t \pmod P)}{P}, \quad \theta_{\text{micro}} = \frac{2\pi \cdot (\lfloor V / V_q \rfloor \pmod{12})}{12}$$
+  $$\gamma(t) = \cos(\theta_{\text{macro}} - \theta_{\text{micro}})$$
+* Discrete Fourier Transform (DFT) spectral estimator identifies periodicities without prior frequency assumptions.
 
-### C. Phase 2 Empirical Fisher Information Apoptosis (`tree.hpp`)
-Excises overparameterized leaf nodes in deep layers ($d \ge 7$) when the local Fisher noise ratio spikes:
-$$s_{\text{cancer}} = \frac{F_N}{\rho_{\text{margin}} \sqrt{N + 1}} \cdot (1 - \text{OOF\_Consistency})$$
+### 3. Causal Kalman Filtering & TVP (`kalman.hpp`)
+* Formulates time-varying parameter updates with strictly causal state estimation:
+  $$P_t = (I - K_t H) P_{t|t-1} (I - K_t H)^T + K_t R K_t^T$$
+* Huber-clipped innovation updates prevent covariance divergence under fat-tailed or high-volatility shocks:
+  $$\tilde{y}_{k, \text{clipped}} = \text{clamp}\left(\frac{\tilde{y}_k}{\sigma_S}, -\tau, \tau\right) \cdot \sigma_S$$
 
-### D. Multi-Factor SVD Market Orthogonalization & Directed Network (`network.hpp`)
-Strips $K$ principal market components via deflated truncated SVD before computing directed lead-lag spillovers:
-$$Y_{\text{idiosyncratic}} = Y - \sum_{k=1}^K s_k u_k v_k^T$$
-Calculates total spillover index ($TCI$), dimension-normalized $TCI_N = TCI \times \frac{N}{N-1}$, HITS Hubs (shock transmitters), and Authorities (systemic absorbers).
+### 4. Regularized Piecewise Regression Trees (`tree.hpp`)
+* Evaluates non-linear residual structures via bounded piecewise regression trees.
+* Utilizes Fisher Information Matrix metrics and sample-margin density criteria to guide terminal-node pruning and mitigate finite-sample overfitting.
 
-### E. Multiverse Counterfactual Synthesis (`multiverse.hpp`)
-Reconstructs unobserved pre-listing or missing historical series across $M$ parallel universe trajectories, pruning outliers via median-distance apoptosis and smoothing boundary jumps via cubic Hermite interpolation:
-$$H(t) = 3t^2 - 2t^3$$
+### 5. Directional Network Spillover (`network.hpp`)
+* Estimates directional connectedness based on Generalized Forecast Error Variance Decomposition (GFEVD).
+* Truncated SVD orthogonalization separates common systematic market drivers from idiosyncratic innovations.
+* Evaluates Kleinberg graph centrality (Hub and Authority scores) to identify primary transmitters and absorbers of shocks.
 
-### F. Two-Stage Econometrics & Multiverse Invariance (`static.hpp`)
-Extends classical econometrics with Phase 2 Apoptosis Tree to rescue weak models ($R^2$):
-* **Phase 1 OLS Baseline**: Computes Stata-compliant summary tables, standard errors, $t$-statistics, and Ramsey RESET omitted-variable form test.
-* **Phase 2 Residual Tree**: Fits residual variance, pruning idiosyncratic noise with Fisher Information.
-* **Closed-Form Rule Export**: Emits exact formulas in 3 representations: Boolean step $\mathbb{I}$, Logistic Smooth Transition (LSTR), and Hinge Splines.
-* **Multiverse Invariance Screening**: Verifies stability across $M$ parallel universe perturbations (survival rate $\ge 80\%$, sign consistency).
+### 6. Counterfactual Panel Reconstruction (`multiverse.hpp`)
+* Implements counterfactual imputation for unbalanced historical panels using multi-path stochastic simulations.
+* Cubic Hermite interpolation ($3t^2 - 2t^3$) ensures continuous boundaries between imputed and observed data.
+
+### 7. Two-Stage Estimation & Conformal Inference (`static.hpp`)
+* Additive two-stage framework: combines parametric base estimators with non-linear residual trees.
+* Computes finite-sample distribution-free Split Conformal Prediction Intervals:
+  $$P\Big(Y_{n+1} \in [\hat{Y}_{n+1} - q, \hat{Y}_{n+1} + q]\Big) \ge 1 - \alpha$$
 
 ---
 
-## 🚀 3. Quick Start
+## Integration
 
-### Direct Single-Command Compilation (GCC / Clang)
+### Single-Command Compilation
+Include the `include/` directory when compiling with any C++20-compliant compiler:
 
 ```bash
-# Compile with C++20 standard and include nirvana headers
-g++ -std=c++20 -O3 -I include your_app.cpp -o your_app
-./your_app
+# GCC / Clang
+g++ -std=c++20 -O3 -I include your_program.cpp -o your_program
+
+# MSVC
+cl /std:c++20 /O2 /I include your_program.cpp
 ```
 
-### Modern CMake Integration
+### Modern CMake Target
+Add the library as a subdirectory in your project's `CMakeLists.txt`:
 
-Add as an interface library target in your `CMakeLists.txt`:
 ```cmake
 add_subdirectory(nirvana_cpp)
 target_link_libraries(your_target PRIVATE nirvana)
@@ -78,7 +88,7 @@ target_link_libraries(your_target PRIVATE nirvana)
 
 ---
 
-## 💻 4. Minimal Code Snippet
+## Usage Example
 
 ```cpp
 #include <nirvana/nirvana.hpp>
@@ -87,21 +97,29 @@ target_link_libraries(your_target PRIVATE nirvana)
 int main() {
     using namespace nirvana;
 
-    // 1. Initialize Engine with SVD Multi-Factor Orthogonalization
+    // 1. Initialize Directional Connectedness Engine
     NirvanaConnectedness engine;
     engine.lags_ = {1, 2};
     engine.orthogonalize_market_ = true;
     engine.n_market_factors_ = 1;
-    engine.kalman_outlier_threshold_ = 3.0; // Huber robust fat-tail bounds
+    engine.kalman_outlier_threshold_ = 3.0; // Huber bounds
 
-    // 2. Load or generate returns matrix (T samples, N nodes)
-    Matrix returns(252, 4); // [T=252, N=4]
-    // ... fill returns ...
+    // 2. Prepare returns matrix (T time periods, N entities)
+    Matrix returns(252, 4);
+    // ... populate matrix ...
 
-    // 3. Compute Directed Lead-Lag Network Report
-    SystemicRiskReport report = engine.fit(returns, {"Node_A", "Node_B", "Node_C", "Node_D"});
+    // 3. Compute directional spillover metrics
+    SystemicRiskReport report = engine.fit(returns, {"Asset_A", "Asset_B", "Asset_C", "Asset_D"});
     report.print_summary();
 
     return 0;
 }
 ```
+
+---
+
+## Authors & Maintainers
+* **yinyusi65**
+
+## License
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](../LICENSE) file for details.

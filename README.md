@@ -68,6 +68,11 @@ For environments requiring minimal runtime overhead, Nirvana includes a self-con
 
 ## Installation
 
+### From PyPI
+```bash
+pip install nirvana-quant
+```
+
 ### From GitHub
 ```bash
 pip install git+https://github.com/yinyusi65/nirvana-algorithm.git

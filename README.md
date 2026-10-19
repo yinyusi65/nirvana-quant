@@ -31,11 +31,11 @@ The engine extracts systemic interbank connections from multivariate asset price
 
 | Pairwise Spillover Intensity Heatmap (27x27) | Directed Systemic Risk Network Topology |
 | :---: | :---: |
-| <img src="banking_econometrics/nirvana_net_v2/output/banking_pairwise_spillover_heatmap.png" width="450"/> | <img src="banking_econometrics/nirvana_net_v2/output/banking_network_directed_topology.png" width="450"/> |
+| <img src="docs/images/banking_pairwise_spillover_heatmap.png" width="450"/> | <img src="docs/images/banking_network_directed_topology.png" width="450"/> |
 
 | Net Transmitter vs. Receiver Ranking | Hub vs. Authority Scatterplot |
 | :---: | :---: |
-| <img src="banking_econometrics/nirvana_net_v2/output/banking_net_spillover_ranking.png" width="450"/> | <img src="banking_econometrics/nirvana_net_v2/output/banking_hub_vs_authority_scatter.png" width="450"/> |
+| <img src="docs/images/banking_net_spillover_ranking.png" width="450"/> | <img src="docs/images/banking_hub_vs_authority_scatter.png" width="450"/> |
 
 ---
 

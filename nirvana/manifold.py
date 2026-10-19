@@ -204,7 +204,11 @@ class FractionalBase12Manifold(Base12Manifold):
         alpha_annual: float = 2.2255,   # 12^2.2255 ~= 252.0 sessions
         volume_quantum: float = 1000.0,
         fractional_shift: float = 0.0,
+        alpha: Optional[float] = None,
     ):
+        if alpha is not None:
+            alpha_quarter = float(alpha)
+            alpha_annual = float(alpha) + 0.5588
         p1 = float(12.0 ** alpha_quarter)
         p2 = float(12.0 ** alpha_annual)
         super().__init__(volume_quantum=volume_quantum, macro_periods=(p1, p2))

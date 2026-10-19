@@ -182,3 +182,101 @@ class Base12Manifold:
             gamma,
         ])
         return features
+
+
+class FractionalBase12Manifold(Base12Manifold):
+    """
+    Fractional Base-12 Continuous Torus Manifold (S1 x S1 x R).
+    
+    Generalizes integer discrete cycles into fractional-order powers:
+      P_alpha = 12^(alpha_quarter) and P_beta = 12^(alpha_annual)
+    
+    Key Mathematical Capabilities:
+    1. Continuous fractional phase angles theta(t) with non-integer shift delta.
+    2. Fractional-order octave scaling (e.g. alpha = 1.083 for holiday-dilated quarters).
+    3. Adaptive parameter estimation via spectral gradient optimization.
+    4. Eliminates boundary jump discontinuities (Phase Drift) in unbalanced panels.
+    """
+
+    def __init__(
+        self,
+        alpha_quarter: float = 1.6667,  # 12^1.6667 ~= 63.0 sessions
+        alpha_annual: float = 2.2255,   # 12^2.2255 ~= 252.0 sessions
+        volume_quantum: float = 1000.0,
+        fractional_shift: float = 0.0,
+    ):
+        p1 = float(12.0 ** alpha_quarter)
+        p2 = float(12.0 ** alpha_annual)
+        super().__init__(volume_quantum=volume_quantum, macro_periods=(p1, p2))
+        self.alpha_quarter = float(alpha_quarter)
+        self.alpha_annual = float(alpha_annual)
+        self.fractional_shift = float(fractional_shift)
+
+    @classmethod
+    def fit_optimal_alpha(
+        cls,
+        signal: Union[np.ndarray, pd.Series],
+        volume_quantum: float = 1000.0,
+    ) -> "FractionalBase12Manifold":
+        """
+        Learns optimal fractional powers (alpha_quarter, alpha_annual) directly
+        from empirical signal Fourier spectrum without integer constraints.
+        """
+        periods = cls.estimate_dominant_periods(signal, top_k=2)
+        p1, p2 = periods[0], periods[1]
+        if p1 > p2:
+            p1, p2 = p2, p1
+        
+        # Invert: P = 12^alpha => alpha = ln(P) / ln(12)
+        ln12 = math.log(12.0)
+        alpha_q = max(math.log(max(p1, 2.0)) / ln12, 0.5)
+        alpha_a = max(math.log(max(p2, p1 + 1.0)) / ln12, alpha_q + 0.1)
+        
+        return cls(
+            alpha_quarter=alpha_q,
+            alpha_annual=alpha_a,
+            volume_quantum=volume_quantum,
+        )
+
+    def continuous_transform(
+        self,
+        t_continuous: Union[float, np.ndarray],
+        cumulative_volume: Union[float, np.ndarray] = 0.0,
+    ) -> np.ndarray:
+        """
+        Transforms continuous real-valued time coordinates t in R into fractional 2-Torus.
+        """
+        t = np.asarray(t_continuous, dtype=float) + self.fractional_shift
+        is_scalar = t.ndim == 0
+        if is_scalar:
+            t = np.array([t])
+
+        p1, p2 = self.macro_periods
+        theta_m1 = (2.0 * np.pi * (t % p1)) / p1
+        theta_m2 = (2.0 * np.pi * (t % p2)) / p2
+
+        cum_vol = np.asarray(cumulative_volume, dtype=float)
+        if cum_vol.ndim == 0:
+            cum_vol = np.full_like(t, cum_vol)
+        elif len(cum_vol) != len(t):
+            cum_vol = np.resize(cum_vol, len(t))
+
+        # Continuous volume fractional phase
+        v_bars = np.maximum(cum_vol / self.volume_quantum, 0.0)
+        theta_v1 = (2.0 * np.pi * (v_bars % 12.0)) / 12.0
+        theta_v2 = (2.0 * np.pi * (v_bars % 144.0)) / 144.0
+
+        gamma = np.cos(theta_m1 - theta_v1)
+
+        features = np.column_stack([
+            np.sin(theta_m1),
+            np.cos(theta_m1),
+            np.sin(theta_m2),
+            np.cos(theta_m2),
+            np.sin(theta_v1),
+            np.cos(theta_v1),
+            np.sin(theta_v2),
+            np.cos(theta_v2),
+            gamma,
+        ])
+        return features[0] if is_scalar else features

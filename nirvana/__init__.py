@@ -8,7 +8,7 @@ Author: yinyusi65 & Nirvana Quant Team
 License: MIT / Academic Research
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 from .manifold import Base12Manifold, FractionalBase12Manifold, DualClockCoordinates
 from .kalman import CausalOnlineKalman, MultivariateCausalKalman, CausalKalmanTVPRegressor

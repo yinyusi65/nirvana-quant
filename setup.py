@@ -7,7 +7,7 @@ with open(os.path.join(here, "README.md"), encoding="utf-8") as f:
 
 setup(
     name="nirvana-quant",
-    version="1.0.0",
+    version="1.0.1",
     author="yinyusi65",
     description="A Statistical and Econometric Framework for Multivariate Cyclical Time Series",
     long_description=long_description,

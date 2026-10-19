@@ -1,83 +1,79 @@
-# NIRVANA: Chrono-Cancer Meta-Architecture for Cyclical Time-Series Analysis
+# Nirvana: A Statistical and Econometric Framework for Multivariate Cyclical Time Series
 
 [![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20%20Header--Only-purple.svg)](nirvana_cpp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**NIRVANA** is an institutional-grade, mathematically rigorous framework designed for **high-dimensional cyclical time-series analysis**, directional lead-lag network inference, causal state-space filtering, and topological shock transmission across interconnected complex systems.
+**Nirvana** is an open-source research toolkit for **multivariate time-series econometrics**, state-space filtering, directional network spillover modeling, and counterfactual panel reconstruction. 
 
-It combines state-space econometrics, non-linear machine learning with biological apoptosis regularization, and topological counterfactual synthesis to uncover unobserved systemic risk and latent financial flows.
-
----
-
-## 🌟 Core Architecture & Engines
-
-The framework is structured into five foundational mathematical engines:
-
-1. **Dual-Clock Base-12 Manifold (`nirvana.manifold`)**:
-   - Maps asynchronous temporal cycles and discrete transaction ticks onto a 2-Torus ($\mathbb{T}^2 = S^1 \times S^1$).
-   - Calculates phase resonance coordinates $\gamma(t) = \cos(\theta_{\text{macro}} - \theta_{\text{micro}})$.
-   - Dominant cycle detection via Discrete Fourier Transform (DFT) power spectrum analysis.
-
-2. **Causal Kalman State-Space TVP Regressor (`nirvana.kalman`)**:
-   - Strictly causal online state estimation with zero lookahead bias.
-   - Joseph-form stabilized covariance updating: $P_t = (I - K_t H)P_{t|t-1}(I - K_t H)^T + K_t R K_t^T$.
-   - Huber-robust innovation bounding resisting heavy-tailed anomalies and liquidity flash shocks.
-   - Fully integrated as both a time-series filter and a time-varying parameter regressor (`CausalKalmanTVPRegressor`).
-
-3. **12-Layer Tree Engine with Fisher Apoptosis (`nirvana.tree`)**:
-   - Deep piecewise regression engine with maximum depth 12.
-   - Empirical Fisher Information Matrix ($F_N$) and margin-density ($\rho_{\text{margin}}$) scoring.
-   - Selective apoptosis pruning in deep layers ($d \ge 7$) to excise noise overfitting.
-
-4. **Directional Connectedness & Lead-Lag Network (`nirvana.network`)**:
-   - Multi-lag convolution kernels capturing delayed spillover dynamics across nodes.
-   - Truncated SVD decomposition for stripping common pervasive systemic market factors.
-   - Kleinberg HITS graph centrality: separates primary shock transmitters (Hub Centrality) from systemic shock absorbers (Authority Centrality).
-   - Generalized Forecast Error Variance Decomposition (GFEVD Koop-Pesaran-Potter).
-
-5. **Multiverse Counterfactual Synthesis & Inversion (`nirvana.multiverse`)**:
-   - Reconstructs unobserved, pre-listing, or missing intervals across $M$ parallel stochastic universe paths.
-   - Apoptosis pruning of divergent simulation branches via median-distance bounds.
-   - Smooth cubic Hermite S-curve ($3t^2 - 2t^3$) boundary bridging to prevent artificial listing jump shocks.
-   - Counterfactual topological inversion: maps market network spillovers to unobserved bilateral institutional balances.
-
-6. **Phase 2 Booster & Split Conformal Prediction (`nirvana.static`, `nirvana.proof`)**:
-   - Two-stage gradient-residual boosting with non-linear tree residuals.
-   - Distribution-free Split Conformal Prediction Intervals guaranteeing exact finite-sample coverage:
-     $$P\Big(Y_{\text{true}} \in [\hat{Y} - q, \hat{Y} + q]\Big) \ge 1 - \alpha$$
-   - Multiverse invariance testing across 100 stochastic resampled universes.
+The library bridges classical econometric methodologies (Diebold–Yılmaz variance decompositions, Kalman state-space filtering, regularized regression) with modern statistical learning tools (piecewise regression trees, information-theoretic regularization, and split conformal inference).
 
 ---
 
-## 📦 Domain Modules (`nirvana.domains`)
+## Methodological Overview
 
-Nirvana isolates domain-specific semantics into clean, modular extensions:
+The toolkit provides modular components for processing, modeling, and diagnosing high-dimensional time series:
 
-* **`nirvana.domains.banking`**: Systemic importance classification (SIFI), exchange price-band bounds, asset scale anchors, and interbank placement/borrowing structural inversion.
-* **`nirvana.domains.cybersecurity`**: Network attack propagation, botnet/DDoS command-and-control hub detection, sink authority identification, and traffic burst filtering.
-* **`nirvana.domains.supply_chain`**: Multi-tier bullwhip effect propagation, critical bottleneck supplier discovery, and cascading disruption modeling.
+### 1. Harmonic Feature Mapping (`nirvana.manifold`)
+* Maps multi-frequency cyclical indicators (such as reporting periods and calendar cycles) to periodic coordinates using toroidal projections ($\mathbb{T}^2 = S^1 \times S^1$).
+* Employs Discrete Fourier Transform (DFT) spectral estimation to identify dominant periodicity without requiring pre-specified frequencies.
+
+### 2. Causal State-Space Filtering & Time-Varying Parameters (`nirvana.kalman`)
+* Implements sequential Kalman filtering and online parameter estimation with strictly causal updates (no lookahead bias).
+* Utilizes the Joseph stabilized covariance form:
+  $$P_t = (I - K_t H) P_{t|t-1} (I - K_t H)^T + K_t R K_t^T$$
+  to maintain positive semi-definiteness under ill-conditioned measurement environments.
+* Incorporates Huber-type innovation bounds to limit sensitivity to outlier observations.
+
+### 3. Regularized Piecewise Regression (`nirvana.tree`)
+* Evaluates non-linear residual structures via bounded piecewise regression trees.
+* Utilizes Fisher Information and sample-margin density metrics to guide terminal-node pruning and mitigate overfitting on finite samples.
+
+### 4. Directional Spillover & Network Topology (`nirvana.network`)
+* Estimates directional connectedness based on Vector Autoregressions (VAR) and Generalized Forecast Error Variance Decomposition (GFEVD, Koop–Pesaran–Potter).
+* Employs Singular Value Decomposition (SVD) to isolate common systematic market variance from idiosyncratic node innovations.
+* Evaluates directed graph centrality measures, including Kleinberg's Hub and Authority metrics, to distinguish net transmitters from net receivers of shocks.
+
+### 5. Counterfactual Panel Reconstruction (`nirvana.multiverse`)
+* Implements counterfactual imputation for unbalanced historical panels (e.g., pre-listing periods in asset cross-sections).
+* Evaluates sensitivity across structured simulation paths anchored by peer-group dynamics and macroeconomic benchmarks.
+* Uses cubic Hermite transition polynomials to ensure continuous boundaries between reconstructed and observed sample periods.
+
+### 6. Two-Stage Estimation & Conformal Prediction (`nirvana.static`, `nirvana.proof`)
+* Integrates parametric base estimators (OLS, Ridge, Lasso) with non-linear residual trees in a two-stage additive framework.
+* Generates distribution-free prediction intervals via Split Conformal Prediction, satisfying finite-sample coverage guarantees:
+  $$P\Big(Y_{n+1} \in [\hat{Y}_{n+1} - q, \hat{Y}_{n+1} + q]\Big) \ge 1 - \alpha$$
 
 ---
 
-## ⚡ C++20 Header-Only Engine (`nirvana_cpp/`)
+## Domain Implementations (`nirvana.domains`)
 
-For ultra-low latency, mission-critical systems, and embedded hardware, Nirvana provides an institutional-grade, zero-dependency C++20 implementation with full algorithmic parity:
+Nirvana separates computational algorithms from domain-specific data structures:
 
-* **Header-only**: Simply `#include <nirvana/nirvana.hpp>`.
-* **Zero external dependencies**: Built-in contiguous matrix algebra, Gauss-Jordan inversion, Ridge pseudoinverse, and deflated truncated SVD (no external linear algebra libraries required).
-* **Cross-platform**: Compatible with GCC 12+, Clang 15+, and MSVC 19.30+.
+* **`banking`**: Empirical asset-scaling adjustments, trading band volatility constraints, and interbank liquidity position mappings for Basel systemic risk studies.
+* **`cybersecurity`**: Directed network graph modeling for anomalous traffic flows, command-and-control propagation, and denial-of-service node centrality.
+* **`supply_chain`**: Multi-tier propagation models for inventory volatility and supplier dependency shocks.
 
 ---
 
-## 🚀 Installation
+## C++ Implementation (`nirvana_cpp/`)
 
-### Option 1: Direct from GitHub (Colab / Kaggle / Local)
+For environments requiring minimal runtime overhead, Nirvana includes a self-contained C++20 header library:
+
+* Header-only structure: `#include <nirvana/nirvana.hpp>`.
+* Self-contained linear algebra routines (matrix decomposition, SVD, pseudoinverse) without mandatory external dependencies.
+* Compatible with standard C++20 compilers (GCC 12+, Clang 15+, MSVC 19.30+).
+
+---
+
+## Installation
+
+### From GitHub
 ```bash
 pip install git+https://github.com/yinyusi65/nirvana-algorithm.git
 ```
 
-### Option 2: Local Development Mode
+### From Local Source
 ```bash
 git clone https://github.com/yinyusi65/nirvana-algorithm.git
 cd nirvana-algorithm
@@ -86,51 +82,59 @@ pip install -e .
 
 ---
 
-## 💻 Quickstart Examples
+## Usage Examples
 
-### 1. Directional Network Spillover Analysis
+### Example 1: Directional Spillover Analysis
 ```python
 import numpy as np
 import pandas as pd
 from nirvana import NirvanaConnectedness
 
-# Multivariate cyclical series (T samples, N nodes)
+# Example: T daily observations across N entities
+np.random.seed(42)
 T, N = 500, 5
-data = pd.DataFrame(
+returns_df = pd.DataFrame(
     np.random.randn(T, N),
-    columns=[f"Node_{i}" for i in range(N)]
+    columns=[f"Asset_{i}" for i in range(N)]
 )
 
-engine = NirvanaConnectedness(
+# Initialize and estimate connectedness model
+model = NirvanaConnectedness(
     lags=[1, 2],
     kalman_q=1e-3,
     kalman_r=1e-2,
     orthogonalize_market=True
 )
+results = model.fit(returns_df)
 
-report = engine.fit(data)
-print(f"Total Connectedness Index (TCI): {report.total_connectedness_index:.2f}%")
-print("Top Transmitters:", report.top_transmitters)
-print("Top Receivers:", report.top_receivers)
+print(f"Total Connectedness Index: {results.total_connectedness_index:.2f}%")
+print("Top Transmitters:", results.top_transmitters)
+print("Top Receivers:", results.top_receivers)
 ```
 
-### 2. Two-Stage Booster with Conformal Prediction Intervals
+### Example 2: Two-Stage Regression with Conformal Prediction Bounds
 ```python
 import numpy as np
 from nirvana import NirvanaTwoStageRegressor
 
-X = np.random.randn(100, 4)
-y = 2.0 * X[:, 0] - 1.5 * (X[:, 1] ** 2) + np.random.randn(100) * 0.2
+# Generate non-linear synthetic cross-section
+np.random.seed(42)
+X = np.random.randn(120, 3)
+y = 1.8 * X[:, 0] - 0.7 * (X[:, 1] ** 2) + np.random.randn(120) * 0.15
 
-model = NirvanaTwoStageRegressor(base_estimator="ols", max_depth=5)
-model.fit(X, y)
+# Fit model with OLS baseline and tree-based residual capture
+regressor = NirvanaTwoStageRegressor(base_estimator="ols", max_depth=4)
+regressor.fit(X, y)
 
-# Predict point forecasts and 95% conformal confidence bounds
-y_pred, y_lower, y_upper = model.predict_interval(X, alpha=0.05)
-print(f"Predicted: {y_pred[0]:.2f}, 95% Bound: [{y_lower[0]:.2f}, {y_upper[0]:.2f}]")
+# Compute 95% conformal prediction intervals
+y_pred, y_lower, y_upper = regressor.predict_interval(X, alpha=0.05)
+print(f"Point Forecast: {y_pred[0]:.3f}, 95% Interval: [{y_lower[0]:.3f}, {y_upper[0]:.3f}]")
 ```
 
 ---
 
-## 📜 Authors & Citation
+## Authors & Maintainers
 * **Lưu Văn Toàn** (`yinyusi65`)
+
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

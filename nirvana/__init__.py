@@ -8,11 +8,12 @@ Author: yinyusi65 & Nirvana Quant Team
 License: MIT / Academic Research
 """
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 from .manifold import Base12Manifold, FractionalBase12Manifold, DualClockCoordinates
 from .kalman import CausalOnlineKalman, MultivariateCausalKalman, CausalKalmanTVPRegressor
 from .tree import NirvanaTreeEngine, TrainingSample
+from .ensemble import NirvanaPyramidEnsemble
 from .network import (
     NirvanaConnectedness,
     SystemicRiskReport,
@@ -48,6 +49,7 @@ __all__ = [
     "MultivariateCausalKalman",
     "NirvanaTreeEngine",
     "TrainingSample",
+    "NirvanaPyramidEnsemble",
     "NirvanaStaticBooster",
     "StaticEconometricReport",
     "NirvanaTreeRegressor",

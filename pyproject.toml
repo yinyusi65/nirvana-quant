@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nirvana-quant"
-version = "1.0.2"
+version = "1.0.3"
 authors = [
   { name="yinyusi65" },
 ]
@@ -24,10 +24,7 @@ dependencies = [
     "scipy>=1.8.0",
 ]
 
-[project.urls]
-"Homepage" = "https://github.com/yinyusi65/nirvana-quant"
-"Bug Tracker" = "https://github.com/yinyusi65/nirvana-quant/issues"
-
 [tool.setuptools.packages.find]
-include = ["nirvana*"]
-
+where = ["."]
+include = ["nirvana*", "nirvana_quant*"]
+exclude = ["tests*", "docs*", "scratch*"]

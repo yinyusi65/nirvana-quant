@@ -405,9 +405,17 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         cal_y_eval = y_cal
         if cal_X_eval is None and self.conformal_split_ratio > 0.0 and N >= 10:
             if groups is not None:
-                # Group-aware chronological panel split (by year, quarter, or date block)
                 grp_arr = np.asarray(getattr(groups, "values", groups))
-                unique_grps = pd.Series(grp_arr).drop_duplicates().values
+                if len(grp_arr) != N:
+                    raise ValueError(
+                        f"Length of groups ({len(grp_arr)}) must match number of samples in X and y ({N})."
+                    )
+                # Sort group identifiers chronologically to guarantee latest periods are holdout
+                try:
+                    unique_grps = pd.Series(grp_arr).drop_duplicates().sort_values().values
+                except Exception:
+                    unique_grps = pd.Series(grp_arr).drop_duplicates().values
+
                 n_grps = len(unique_grps)
                 if n_grps >= 2:
                     n_cal_grps = int(np.ceil(n_grps * self.conformal_split_ratio))

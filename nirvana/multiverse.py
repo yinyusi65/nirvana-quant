@@ -88,18 +88,19 @@ class MultiverseReconstructor:
         m_sin_2 = manifold_features[:, 2]
 
         # 2. Market Baseline Factor (harmonized to annualized log-volatility scale)
+        # Strictly causal alignment: zero backward filling from future market periods
         if market_index is not None:
-            aligned_mkt = market_index.reindex(dates).ffill().bfill()
+            aligned_mkt = market_index.reindex(dates).ffill()
             if float(np.nanmean(aligned_mkt)) > 10.0:
                 # Price index (e.g. VN-Index closing levels): compute annualized log-volatility percentage
-                mkt_ret = np.log(np.maximum(aligned_mkt / aligned_mkt.shift(1).bfill(), 1e-8)).values
+                mkt_ret = np.log(np.maximum(aligned_mkt / aligned_mkt.shift(1), 1e-8)).fillna(0.0).values
                 mkt_vol = np.log(100.0 * np.sqrt(252.0 * np.maximum(mkt_ret ** 2, 1e-4)))
             else:
-                mkt_vol = aligned_mkt.values
+                mkt_vol = aligned_mkt.fillna(0.0).values
         else:
             # Fallback: cross-sectional average of core9 always-active banks
             core_banks = [c for c in ["VCB", "CTG", "BID", "ACB", "MBB"] if c in df.columns]
-            mkt_vol = df[core_banks].mean(axis=1).values
+            mkt_vol = df[core_banks].mean(axis=1).ffill().fillna(0.0).values
 
         # 3. Process each bank individually
         reconstructed = df.copy()
@@ -115,16 +116,18 @@ class MultiverseReconstructor:
 
             # Compute strictly causal historical peer average (using available active peers at each t)
             # Eliminate look-ahead bias: only aggregate contemporary non-NaN peers at period t, without future bfill
+            # Initial baseline constant: first observed non-NaN cross-sectional mean (expanding causal base)
+            initial_t0_val = float(df.iloc[0].dropna().mean()) if len(df.iloc[0].dropna()) > 0 else 0.0
             if len(peer_banks) > 0:
                 tier_sub = df[peer_banks]
                 tier_mean = tier_sub.mean(axis=1)
                 sys_mean = df.mean(axis=1)
-                peer_series = tier_mean.fillna(sys_mean).ffill().fillna(float(np.nanmean(df.values)))
+                peer_series = tier_mean.fillna(sys_mean).ffill().fillna(initial_t0_val)
                 peer_vol = peer_series.values
             else:
-                peer_vol = df.mean(axis=1).ffill().fillna(float(np.nanmean(df.values))).values
+                peer_vol = df.mean(axis=1).ffill().fillna(initial_t0_val).values
 
-            system_vol = df.mean(axis=1).ffill().fillna(float(np.nanmean(df.values))).values
+            system_vol = df.mean(axis=1).ffill().fillna(initial_t0_val).values
 
             # If bank has zero observed data across the entire panel, synthesize from peer tier
             if first_idx is None:

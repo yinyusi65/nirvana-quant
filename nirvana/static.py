@@ -377,15 +377,19 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         if cal_X_eval is None and self.conformal_split_ratio > 0.0 and N >= 10:
             n_cal = int(np.floor(N * self.conformal_split_ratio))
             n_cal = max(2, min(n_cal, N - 4))
-            rng = np.random.default_rng(seed=42)
-            perm = rng.permutation(N)
-            c_idx = perm[:n_cal]
-            t_idx = perm[n_cal:]
+            # Chronological temporal split for time-series / banking panels (zero future leakage)
+            # Calibration set is the most recent contiguous hold-out window: [N - n_cal : N]
+            t_idx = np.arange(N - n_cal)
+            c_idx = np.arange(N - n_cal, N)
             cal_X_eval = X_mat[c_idx]
             cal_y_eval = y_vec[c_idx]
             X_mat = X_mat[t_idx]
             y_vec = y_vec[t_idx]
             N = len(y_vec)
+            if hasattr(X, "iloc"):
+                X = X.iloc[t_idx]
+            else:
+                X = X_mat
 
         # --- Optional Factor Compression (SVD Orthogonalization) to protect degrees of freedom ---
         self.pca_mean_ = None
@@ -610,10 +614,11 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         n_cal = len(self.conformal_residuals_)
         # Exact finite-sample distribution-free conformal order statistic: ceil((n + 1) * (1 - alpha))
         k = int(np.ceil((n_cal + 1) * (1.0 - alpha)))
-        residuals_sorted = np.sort(self.conformal_residuals_)
         if k > n_cal:
-            q = float(residuals_sorted[-1])
+            # Conservative finite-sample guarantee when sample size n_cal < (1 - alpha) / alpha
+            q = float("inf")
         else:
+            residuals_sorted = np.sort(self.conformal_residuals_)
             q = float(residuals_sorted[k - 1])
 
         y_lower = y_pred - q

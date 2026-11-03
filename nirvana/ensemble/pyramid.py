@@ -74,11 +74,22 @@ class NirvanaPyramidEnsemble(BaseEstimator, RegressorMixin):
         return self
 
     def predict(self, X: Union[np.ndarray, pd.DataFrame]) -> np.ndarray:
-        """Dự báo trung bình cộng từ toàn bộ quần thể cây kim tự tháp."""
+        """
+        Dự báo tổng hợp từ toàn bộ quần thể cây kim tự tháp.
+        Áp dụng Dynamic Depth-Decaying SWA:
+        Gán trọng số ưu tiên các tầng vĩ mô và trung mô vững chắc (Tầng 8-12),
+        đồng thời suy giảm trọng số các tầng vi mô sâu (Tầng 13-18) để tránh overfitting.
+        """
         X_mat = getattr(X, "values", X)
         X_mat = np.asarray(X_mat, dtype=float)
         all_preds = np.array([tree.predict(X_mat) for tree in self.trees_])
-        return np.mean(all_preds, axis=0)
+        
+        # Depth decay weighting: w(d) = exp(-0.08 * max(0, d - 10))
+        weights = np.array([np.exp(-0.08 * max(0, d - 10)) for d in self.tree_depths_])
+        norm_weights = weights / np.sum(weights)
+        
+        # Weighted combination across trees
+        return np.tensordot(norm_weights, all_preds, axes=(0, 0))
 
     def extract_valve_features(self, X: Union[np.ndarray, pd.DataFrame]) -> pd.DataFrame:
         """

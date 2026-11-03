@@ -575,9 +575,13 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
             return y_pred, y_pred, y_pred
 
         n_cal = len(self.conformal_residuals_)
-        # Finite-sample exact quantile index: ceil((n + 1) * (1 - alpha)) / n
-        q_level = min(1.0, np.ceil((n_cal + 1) * (1.0 - alpha)) / n_cal)
-        q = float(np.quantile(self.conformal_residuals_, q_level))
+        # Exact finite-sample distribution-free conformal order statistic: ceil((n + 1) * (1 - alpha))
+        k = int(np.ceil((n_cal + 1) * (1.0 - alpha)))
+        residuals_sorted = np.sort(self.conformal_residuals_)
+        if k > n_cal:
+            q = float(residuals_sorted[-1])
+        else:
+            q = float(residuals_sorted[k - 1])
 
         y_lower = y_pred - q
         y_upper = y_pred + q

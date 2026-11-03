@@ -500,9 +500,13 @@ class NirvanaConnectedness:
 
         # Betweenness Centrality (Bridge / Bottleneck Banks via Floyd-Warshall on transmission friction)
         # Directed transmission: edge u -> v transmits shock with strength norm_kernel[v, u] (norm_kernel.T[u, v]).
+        # Metric: In financial diffusion networks, friction follows negative log of transmission probability:
+        # D_uv = -ln(P_uv). When P_uv -> 0, friction -> infinity.
         A_trans = norm_kernel.T.copy()
         np.fill_diagonal(A_trans, 0.0)
-        D = np.where(A_trans > 0, 1.0 / (A_trans + 1e-4), 1e6)
+        # Use negative logarithm of transmission intensity with continuous clipping for numerical stability
+        p_safe = np.clip(A_trans / 100.0, 1e-6, 1.0)
+        D = np.where(A_trans > 0.0, -np.log(p_safe), 1e6)
         np.fill_diagonal(D, 0.0)
 
         for k in range(n_nodes):

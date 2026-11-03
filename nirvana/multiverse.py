@@ -114,8 +114,13 @@ class MultiverseReconstructor:
             ]
 
             # Compute historical peer average (using available peers at each t)
+            # If peer banks within same tier are available, anchor primarily on them to eliminate size-induced bias
             if len(peer_banks) > 0:
-                peer_vol = df[peer_banks].mean(axis=1).bfill().ffill().fillna(0.0).values
+                tier_sub = df[peer_banks]
+                # If all peers in tier are NaN at earlier t, fall back to cross-sectional non-NaN mean
+                tier_mean = tier_sub.mean(axis=1)
+                sys_mean = df.mean(axis=1)
+                peer_vol = tier_mean.fillna(sys_mean).bfill().ffill().fillna(0.0).values
             else:
                 peer_vol = df.mean(axis=1).bfill().ffill().fillna(0.0).values
 

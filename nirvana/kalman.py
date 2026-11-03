@@ -125,8 +125,9 @@ class MultivariateCausalKalman:
             P_new = I_K @ P_pred @ I_K.T + K @ self.R @ K.T
             self.P = 0.5 * (P_new + P_new.T)
             np.fill_diagonal(self.P, np.maximum(np.diag(self.P), 1e-8))
-            # Slowly update baseline mean (alpha = 0.005)
-            self.mu += 0.005 * (self.state - self.mu)
+            # Dynamically update baseline mean (alpha adaptively tuned with innovation magnitude)
+            alpha_mu = min(0.05, 0.005 * (1.0 + float(np.mean(np.abs(innovation)))))
+            self.mu += alpha_mu * (self.state - self.mu)
             return self.state
 
         # Partial observation update (Dynamic node entry / Unbalanced panel)
@@ -150,7 +151,8 @@ class MultivariateCausalKalman:
         P_new = I_KH @ P_pred @ I_KH.T + K_obs @ R_obs @ K_obs.T
         self.P = 0.5 * (P_new + P_new.T)
         np.fill_diagonal(self.P, np.maximum(np.diag(self.P), 1e-8))
-        self.mu += 0.005 * (self.state - self.mu)
+        alpha_mu = min(0.05, 0.005 * (1.0 + float(np.mean(np.abs(innovation_obs)))))
+        self.mu += alpha_mu * (self.state - self.mu)
 
         return self.state
 

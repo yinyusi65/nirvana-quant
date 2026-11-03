@@ -52,7 +52,10 @@ class MultiplexNetworkEngine:
             mean_w = np.mean(weights) if np.mean(weights) > 0 else 1.0
             weights = weights / mean_w
             # Modulate outgoing risk by sender bank's fundamental vulnerability (Column j = Transmitter)
+            # Preserve own-variance diagonal so that transmitter asset scaling only amplifies outward cross-spillover
+            diag_backup = np.diag(fused_core).copy()
             fused_core = fused_core * weights[None, :]
+            np.fill_diagonal(fused_core, diag_backup)
 
         # 2. Interbank bilateral direct exposure network injection
         if interbank_exposures is not None:

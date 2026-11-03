@@ -35,7 +35,11 @@ def compute_parkinson(
     c = np.asarray(close, dtype=float) if close is not None else None
     pc = np.asarray(prev_close, dtype=float) if prev_close is not None else None
 
-    h_l = np.maximum(h / np.maximum(l, 1e-8), 1.0)
+    # Sanitize inverted ticks (protects against high < low feed glitches)
+    true_h = np.maximum(h, l)
+    true_l = np.minimum(h, l)
+
+    h_l = np.maximum(true_h / np.maximum(true_l, 1e-8), 1.0)
     var = (np.log(h_l) ** 2) / (4.0 * np.log(2.0))
 
     # Censoring correction: if H == L and price jumped significantly
@@ -66,7 +70,11 @@ def compute_garman_klass(
     l = np.asarray(low, dtype=float)
     c = np.asarray(close, dtype=float)
 
-    h_l = np.maximum(h / np.maximum(l, 1e-8), 1.0)
+    # Sanitize tick bounds against exchange feed glitches
+    true_h = np.maximum.reduce([h, l, o, c])
+    true_l = np.minimum.reduce([h, l, o, c])
+
+    h_l = np.maximum(true_h / np.maximum(true_l, 1e-8), 1.0)
     c_o = np.maximum(c / np.maximum(o, 1e-8), 1e-8)
 
     term1 = 0.5 * (np.log(h_l) ** 2)
@@ -98,6 +106,10 @@ def compute_yang_zhang(
     c = np.asarray(close, dtype=float)
     pc = np.asarray(prev_close, dtype=float)
 
+    # Sanitize tick bounds against exchange feed glitches
+    true_h = np.maximum.reduce([h, l, o, c])
+    true_l = np.minimum.reduce([h, l, o, c])
+
     # Open-to-close variance
     c_o = np.maximum(c / np.maximum(o, 1e-8), 1e-8)
     var_open_close = np.log(c_o) ** 2
@@ -108,11 +120,11 @@ def compute_yang_zhang(
     o_c_prev = np.maximum(o / np.maximum(safe_pc, 1e-8), 1e-8)
     var_overnight = np.where(valid_pc, np.log(o_c_prev) ** 2, var_open_close)
 
-    # Rogers-Satchell intraday variance (guaranteed non-negative by bounds h >= 1.0 and l <= 1.0)
-    h_c = np.maximum(h / np.maximum(c, 1e-8), 1.0)
-    h_o = np.maximum(h / np.maximum(o, 1e-8), 1.0)
-    l_c = np.maximum(np.minimum(l / np.maximum(c, 1e-8), 1.0), 1e-8)
-    l_o = np.maximum(np.minimum(l / np.maximum(o, 1e-8), 1.0), 1e-8)
+    # Rogers-Satchell intraday variance (guaranteed non-negative by bounds true_h >= max(c, o) and true_l <= min(c, o))
+    h_c = np.maximum(true_h / np.maximum(c, 1e-8), 1.0)
+    h_o = np.maximum(true_h / np.maximum(o, 1e-8), 1.0)
+    l_c = np.maximum(np.minimum(true_l / np.maximum(c, 1e-8), 1.0), 1e-8)
+    l_o = np.maximum(np.minimum(true_l / np.maximum(o, 1e-8), 1.0), 1e-8)
     var_rs = np.log(h_c) * np.log(h_o) + np.log(l_c) * np.log(l_o)
 
     var_total = var_overnight + k * var_open_close + (1.0 - k) * var_rs

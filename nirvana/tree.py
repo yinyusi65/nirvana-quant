@@ -163,7 +163,7 @@ class NirvanaTreeEngine:
         # Sample feature subset or evaluate all features
         for f in range(n_features):
             vals = [dataset[i].features[f] for i in sample_indices]
-            unique_vals = np.percentile(vals, self.split_quantiles)
+            unique_vals = np.unique(np.percentile(vals, self.split_quantiles))
 
             # Check domain economic sign constraints for feature f
             req_sign = 0
@@ -390,6 +390,19 @@ class NirvanaTreeEngine:
             return {k: float(v / total_gain) for k, v in sorted(gains.items(), key=lambda x: -x[1])}
         return {k: 0.0 for k in self.feature_names}
 
+    def _get_healthy_node_value(self, node_idx: int) -> float:
+        """
+        Retrieves the nearest non-cancerous ancestral value when a leaf/branch is excised by Apoptosis.
+        Ensures excised nodes revert to healthy structural invariant tissue rather than memorized noise.
+        """
+        curr = node_idx
+        while curr >= 0:
+            node = self.nodes[curr]
+            if not node.is_pruned_apoptosis:
+                return node.value
+            curr = node.parent_idx
+        return self.nodes[0].value if self.nodes else 0.0
+
     def predict_soft(self, features: List[float]) -> float:
         """
         Smooth Transition Regression (LSTR / Soft Decision Tree Traversal).
@@ -408,7 +421,8 @@ class NirvanaTreeEngine:
                 continue
             node = self.nodes[curr_idx]
             if node.is_leaf or node.is_pruned_apoptosis or node.feature_idx < 0:
-                total_val += prob * node.value
+                node_val = self._get_healthy_node_value(curr_idx)
+                total_val += prob * node_val
                 total_weight += prob
                 continue
 
@@ -437,7 +451,7 @@ class NirvanaTreeEngine:
         while curr_idx >= 0 and curr_idx < len(self.nodes):
             node = self.nodes[curr_idx]
             if node.is_leaf or node.is_pruned_apoptosis:
-                return node.value
+                return self._get_healthy_node_value(curr_idx)
 
             f_val = features[node.feature_idx]
             if f_val <= node.threshold:

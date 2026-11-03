@@ -8,7 +8,7 @@ Author: yinyusi65 & Nirvana Quant Team
 License: MIT / Academic Research
 """
 
-__version__ = "1.0.3"
+__version__ = "1.1.0"
 
 from .manifold import Base12Manifold, FractionalBase12Manifold, DualClockCoordinates
 from .kalman import CausalOnlineKalman, MultivariateCausalKalman, CausalKalmanTVPRegressor
@@ -40,6 +40,24 @@ from .proof import (
     DiscoveredVariableItem,
 )
 from . import domains
+
+def run_tests() -> bool:
+    """
+    Run Nirvana Comprehensive Automated Test Suite (21 Core Econometric Tests).
+    Validates mathematical invariants, Kalman filtering, directional connectedness,
+    Apoptosis pruning, and Conformal prediction guarantees.
+    """
+    import os
+    import subprocess
+    import sys
+    
+    test_script = os.path.join(os.path.dirname(os.path.dirname(__file__)), "test_nirvana_core.py")
+    if os.path.exists(test_script):
+        res = subprocess.run([sys.executable, "-X", "utf8", test_script])
+        return res.returncode == 0
+    else:
+        print(f"Test script not found at: {test_script}")
+        return False
 
 __all__ = [
     "Base12Manifold",
@@ -74,5 +92,6 @@ __all__ = [
     "compute_parkinson",
     "compute_garman_klass",
     "compute_yang_zhang",
+    "run_tests",
     "domains",
 ]

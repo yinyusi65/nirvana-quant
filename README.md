@@ -5,7 +5,7 @@
   <a href="https://pypi.org/project/nirvana-quant/"><img src="https://img.shields.io/pypi/dm/nirvana-quant?color=blue&logo=python&logoColor=white" alt="Downloads"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg?logo=python&logoColor=white" alt="Python Versions"></a>
   <a href="nirvana_cpp/"><img src="https://img.shields.io/badge/C%2B%2B-20%20Header--Only-purple.svg?logo=cplusplus&logoColor=white" alt="C++20"></a>
-  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-green.svg" alt="License: GPL v3"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
   <a href="https://colab.research.google.com/github/yinyusi65/nirvana-quant/blob/main/test_nirvana_netbank_full_pipeline.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"></a>
 </p>
 
@@ -78,18 +78,20 @@ print("Top Shock Receivers:", results.top_receivers[:5])
 * Utilizes Fisher Information Matrix metrics and sample-margin density criteria to guide terminal-node pruning and mitigate finite-sample overfitting.
 
 ### 4. Directional Spillover & Network Topology (`nirvana.network`)
-* Computes directional connectedness matrices via Vector Autoregressions (VAR) and Generalized Forecast Error Variance Decomposition (GFEVD, Koop–Pesaran–Potter).
-* Employs Singular Value Decomposition (SVD) to isolate pervasive common market factors from idiosyncratic innovations.
-* Evaluates Kleinberg graph centrality measures (Hub and Authority scores) to distinguish net transmitters from net receivers of shocks.
+* Computes directional connectedness matrices via Causal Kalman Innovation dynamics and Multi-Lag Asymmetric Lead-Lag transmission (Diebold–Yılmaz framework adapted for large-N banking panels).
+* Employs Truncated SVD to isolate pervasive common market factors from idiosyncratic bank-specific innovations.
+* Integrates Circular Block Bootstrap Edge Apoptosis ($p < 0.05$) to excise statistically spurious links.
+* Evaluates Kleinberg graph centrality measures (Hub and Authority scores) and metric-information Betweenness to distinguish net transmitters from net receivers of shocks.
 
 ### 5. Counterfactual Panel Reconstruction (`nirvana.multiverse`)
-* Implements counterfactual imputation for unbalanced historical panels (such as pre-listing asset periods).
-* Evaluates sensitivity across structured simulation paths anchored on peer-group dynamics and macroeconomic benchmarks.
+* Implements counterfactual imputation for unbalanced historical panels (such as pre-listing asset periods) using Tier-Adaptive Peer Anchoring.
+* Eliminates look-ahead bias by conditioning synthesis strictly on contemporaneous peer dynamics and macroeconomic benchmarks.
 * Uses cubic Hermite transition polynomials ($3t^2 - 2t^3$) to ensure boundary continuity between reconstructed and observed sample periods.
 
 ### 6. Two-Stage Estimation & Conformal Prediction (`nirvana.static`, `nirvana.proof`)
 * Combines parametric base estimators (OLS, Ridge, Lasso) with non-linear residual trees in a two-stage additive framework.
-* Computes distribution-free prediction intervals via Split Conformal Prediction, satisfying finite-sample coverage guarantees:
+* Incorporates Ancestral Fallback Apoptosis Pruning (`_get_healthy_node_value`) to eradicate overfitted noise memorization.
+* Computes exact finite-sample distribution-free prediction intervals via Vovk's order statistic Conformal Prediction, satisfying finite-sample coverage guarantees:
   $$P\Big(Y_{n+1} \in [\hat{Y}_{n+1} - q, \hat{Y}_{n+1} + q]\Big) \ge 1 - \alpha$$
 
 ---
@@ -162,4 +164,4 @@ print(f"Point Forecast: {y_pred[0]:.3f}, 95% Interval: [{y_lower[0]:.3f}, {y_upp
 * **yinyusi65**
 
 ## 📄 License
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

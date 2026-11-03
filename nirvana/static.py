@@ -316,6 +316,7 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         factor_compression: bool = False,
         n_components: Optional[int] = None,
         manifold_lstr: bool = False,
+        conformal_split_ratio: float = 0.0,
     ):
         self.base_estimator = base_estimator
         self.cancer_sensitivity = cancer_sensitivity
@@ -334,6 +335,7 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         self.factor_compression = factor_compression
         self.n_components = n_components
         self.manifold_lstr = manifold_lstr
+        self.conformal_split_ratio = float(np.clip(conformal_split_ratio, 0.0, 0.5))
 
         self.fitted_base_estimator_: Any = None
         self.tree_engine_: Optional[NirvanaTreeRegressor] = None
@@ -344,9 +346,17 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         self.conformal_residuals_: Optional[np.ndarray] = None
         self.report_: Optional[StaticEconometricReport] = None
 
-    def fit(self, X: Union[np.ndarray, pd.DataFrame], y: Union[np.ndarray, pd.Series]):
+    def fit(
+        self,
+        X: Union[np.ndarray, pd.DataFrame],
+        y: Union[np.ndarray, pd.Series],
+        X_cal: Optional[Union[np.ndarray, pd.DataFrame]] = None,
+        y_cal: Optional[Union[np.ndarray, pd.Series]] = None,
+    ):
         """
         Fit Phase 1 base model + Phase 2 Nirvana Apoptosis Tree on residuals.
+        Supports true Split Conformal Calibration either via explicit (X_cal, y_cal)
+        or via automated hold-out split (conformal_split_ratio > 0).
         """
         if hasattr(X, "columns"):
             self.feature_names_ = [str(c) for c in X.columns]
@@ -360,6 +370,22 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         X_mat = np.asarray(X_mat, dtype=float)
         y_vec = np.asarray(y_vec, dtype=float).ravel()
         N, K = X_mat.shape
+
+        # Automated Split Conformal partition if requested and no external calibration provided
+        cal_X_eval = X_cal
+        cal_y_eval = y_cal
+        if cal_X_eval is None and self.conformal_split_ratio > 0.0 and N >= 10:
+            n_cal = int(np.floor(N * self.conformal_split_ratio))
+            n_cal = max(2, min(n_cal, N - 4))
+            rng = np.random.default_rng(seed=42)
+            perm = rng.permutation(N)
+            c_idx = perm[:n_cal]
+            t_idx = perm[n_cal:]
+            cal_X_eval = X_mat[c_idx]
+            cal_y_eval = y_vec[c_idx]
+            X_mat = X_mat[t_idx]
+            y_vec = y_vec[t_idx]
+            N = len(y_vec)
 
         # --- Optional Factor Compression (SVD Orthogonalization) to protect degrees of freedom ---
         self.pca_mean_ = None
@@ -450,7 +476,14 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         residuals_pred_phase2 = self.tree_engine_.predict(X_mat)
         y_pred_final = y_pred_phase1 + self.learning_rate * residuals_pred_phase2
         residuals_final = y_vec - y_pred_final
-        self.conformal_residuals_ = np.abs(residuals_final)
+
+        # Conformal calibration set handling: independent hold-out if provided, else training residuals
+        if cal_X_eval is not None and cal_y_eval is not None:
+            cal_y_pred = self.predict(cal_X_eval)
+            cal_y_true = np.asarray(getattr(cal_y_eval, "values", cal_y_eval), dtype=float).ravel()
+            self.conformal_residuals_ = np.abs(cal_y_true - cal_y_pred)
+        else:
+            self.conformal_residuals_ = np.abs(residuals_final)
 
         ss_res_final = float(np.sum(residuals_final ** 2))
         r2_phase2 = max(0.0, float(1.0 - ss_res_final / max(ss_tot, 1e-12)))

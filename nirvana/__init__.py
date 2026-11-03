@@ -8,7 +8,7 @@ Author: yinyusi65 & Nirvana Quant Team
 License: MIT / Academic Research
 """
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 from .manifold import Base12Manifold, FractionalBase12Manifold, DualClockCoordinates
 from .kalman import CausalOnlineKalman, MultivariateCausalKalman, CausalKalmanTVPRegressor
@@ -51,12 +51,19 @@ def run_tests() -> bool:
     import subprocess
     import sys
     
-    test_script = os.path.join(os.path.dirname(os.path.dirname(__file__)), "test_nirvana_core.py")
-    if os.path.exists(test_script):
+    # Check current directory or parent directory
+    pkg_dir = os.path.dirname(os.path.dirname(__file__))
+    candidates = [
+        os.path.join(pkg_dir, "test_nirvana_core.py"),
+        os.path.join(os.path.dirname(__file__), "test_nirvana_core.py"),
+        "test_nirvana_core.py",
+    ]
+    test_script = next((c for c in candidates if os.path.exists(c)), None)
+    if test_script:
         res = subprocess.run([sys.executable, "-X", "utf8", test_script])
         return res.returncode == 0
     else:
-        print(f"Test script not found at: {test_script}")
+        print("Test script not found.")
         return False
 
 __all__ = [

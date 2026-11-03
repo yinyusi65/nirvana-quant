@@ -29,8 +29,6 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
-test_*.py
-*_test*.py
 tests/
 test/
 *benchmark*.py

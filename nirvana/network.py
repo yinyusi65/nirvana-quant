@@ -392,7 +392,12 @@ class NirvanaConnectedness:
             for _ in range(active_n_boot):
                 shuffled_innov = np.empty_like(weighted_innovations)
                 for col in range(n_nodes):
-                    shift = int(rng.integers(20, t_steps - 20))
+                    if t_steps > 40:
+                        shift = int(rng.integers(20, t_steps - 20))
+                    elif t_steps > 4:
+                        shift = int(rng.integers(1, t_steps - 1))
+                    else:
+                        shift = 0
                     shuffled_innov[:, col] = np.roll(weighted_innovations[:, col], shift)
 
                 boot_corr = np.abs(np.corrcoef(shuffled_innov, rowvar=False))

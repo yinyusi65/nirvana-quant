@@ -3,6 +3,7 @@
 AUDIT REPRODUCIBILITY PIPELINE: NIRVANA-QUANT v1.1.6
 Multi-Bank Volatility Forecasting & Uncertainty Quantification
 Strict 100% Identical Fit / Calibration / Test Partitions Across All Models
+Unified Regularization: Ridge alpha = 10.0 Across All Baseline and TwoStage Configurations
 ========================================================================================
 Data File: data/all27_panel_full_2017_2025.csv
 SHA-256: 62c9634e03c6d179745403abc45e3b1c1aecb54a9b2ccbfae8c5f008d85e781f
@@ -36,7 +37,7 @@ def winkler_score(y_true, lo, hi, alpha=0.10):
 
 def build_features(df_core, target_bank, core_banks):
     """
-    Construct Post-Close feature set available at close of day t to forecast volatility at t+1.
+    Construct Post-Close feature sets available at close of day t to forecast volatility at t+1.
     Zero future leakage: target is y_{t+1} = target_bank.shift(-1).
     """
     y_series = df_core[target_bank].shift(-1)
@@ -62,14 +63,15 @@ def build_features(df_core, target_bank, core_banks):
     
     X_base = features.copy()
     X_kalman = pd.concat([features, pd.DataFrame({"Kalman_State": kalman_feat})], axis=1)
-    X_full = pd.concat([features, df_manifold, pd.DataFrame({"Kalman_State": kalman_feat})], axis=1)
+    X_base12 = pd.concat([features, df_manifold], axis=1)
+    X_both = pd.concat([features, df_manifold, pd.DataFrame({"Kalman_State": kalman_feat})], axis=1)
     
-    return X_base, X_kalman, X_full, y_series
+    return X_base, X_kalman, X_base12, X_both, y_series
 
 def run_multi_bank_benchmark():
-    print("=" * 100)
-    print("STEP 1: MULTI-BANK ROBUSTNESS REPLICATION (7 CORE BANKS, OOS 2024-2025, N=498)")
-    print("=" * 100)
+    print("=" * 105)
+    print("STEP 1: MULTI-BANK ROBUSTNESS REPLICATION (7 CORE BANKS, OOS 2024-2025, UNIFIED RIDGE ALPHA=10.0)")
+    print("=" * 105)
     
     df_raw = pd.read_csv("data/all27_panel_full_2017_2025.csv")
     df_raw["date"] = pd.to_datetime(df_raw["index"])
@@ -80,7 +82,7 @@ def run_multi_bank_benchmark():
     results = []
     
     for bank in core_banks:
-        X_base, X_kalman, _, y_series = build_features(df_core, bank, core_banks)
+        X_base, X_kalman, _, _, y_series = build_features(df_core, bank, core_banks)
         valid_mask = ~(X_kalman.isna().any(axis=1) | y_series.isna())
         dates_valid = df_core.index[valid_mask]
         y_valid = y_series.loc[valid_mask]
@@ -102,30 +104,30 @@ def run_multi_bank_benchmark():
         y_fit = y_tr.iloc[fit_idx]
         y_cal = y_tr.iloc[cal_idx]
         
-        # Model A: Ridge Baseline (Without Kalman)
+        # Model A: Ridge Baseline (alpha=10.0, Without Kalman)
         X_tr_b = X_base.loc[valid_mask].loc[train_mask]
         X_te_b = X_base.loc[valid_mask].loc[test_mask]
         m_base = Ridge(alpha=10.0).fit(X_tr_b.iloc[fit_idx], y_fit)
         pred_b = m_base.predict(X_te_b)
         cal_res_b = np.abs(y_cal.values - m_base.predict(X_tr_b.iloc[cal_idx]))
-        k = int(np.ceil((len(cal_res_b) + 1) * 0.90))
-        q_b = np.sort(cal_res_b)[min(k - 1, len(cal_res_b) - 1)]
+        k_b = int(np.ceil((len(cal_res_b) + 1) * 0.90))
+        q_b = np.sort(cal_res_b)[min(k_b - 1, len(cal_res_b) - 1)]
         w_b = winkler_score(y_te.values, pred_b - q_b, pred_b + q_b)
         r2_b = r2_score(y_te, pred_b)
         
-        # Model B: Ridge + Causal Kalman
+        # Model B: Ridge + Causal Kalman (alpha=10.0)
         X_tr_k = X_kalman.loc[valid_mask].loc[train_mask]
         X_te_k = X_kalman.loc[valid_mask].loc[test_mask]
         m_rk = Ridge(alpha=10.0).fit(X_tr_k.iloc[fit_idx], y_fit)
         pred_rk = m_rk.predict(X_te_k)
         cal_res_rk = np.abs(y_cal.values - m_rk.predict(X_tr_k.iloc[cal_idx]))
-        k = int(np.ceil((len(cal_res_rk) + 1) * 0.90))
-        q_rk = np.sort(cal_res_rk)[min(k - 1, len(cal_res_rk) - 1)]
+        k_k = int(np.ceil((len(cal_res_rk) + 1) * 0.90))
+        q_rk = np.sort(cal_res_rk)[min(k_k - 1, len(cal_res_rk) - 1)]
         w_rk = winkler_score(y_te.values, pred_rk - q_rk, pred_rk + q_rk)
         r2_rk = r2_score(y_te, pred_rk)
         
-        # Model C: TwoStage + Causal Kalman (v1.1.6)
-        m_tk = NirvanaTwoStageRegressor(base_estimator="ridge", learning_rate=0.3, max_depth=5, cancer_sensitivity=1.2)
+        # Model C: TwoStage + Causal Kalman (STRICT UNIFIED Ridge alpha=10.0 in Phase 1)
+        m_tk = NirvanaTwoStageRegressor(base_estimator=Ridge(alpha=10.0), learning_rate=0.3, max_depth=5, cancer_sensitivity=1.2)
         m_tk.fit(X_tr_k.iloc[fit_idx], y_fit, X_cal=X_tr_k.iloc[cal_idx], y_cal=y_cal)
         pred_tk = m_tk.predict(X_te_k)
         _, lo_tk, hi_tk = m_tk.predict_interval(X_te_k, alpha=0.10)
@@ -146,20 +148,72 @@ def run_multi_bank_benchmark():
         
     df_res = pd.DataFrame(results)
     print(df_res.to_string(index=False))
-    print("\nEXACT COLUMN MEANS ACROSS 7 CORE BANKS:")
+    print("\nEXACT COLUMN MEANS ACROSS 7 CORE BANKS (UNIFIED ALPHA=10.0):")
     for col in df_res.columns:
         if col != "Bank":
             print(f"{col:22s}: {df_res[col].mean():.6f}")
             
     return df_core, core_banks
 
-def run_hypothesis_testing(df_core, core_banks):
-    print("\n" + "=" * 100)
-    print("STEP 2: CENTERED MOVING-BLOCK BOOTSTRAP HYPOTHESIS TESTING (VCB TEST SET, B=2000)")
-    print("=" * 100)
+def run_base12_ablation(df_core, core_banks):
+    print("\n" + "=" * 105)
+    print("STEP 2: DIRECT BASE-12 MANIFOLD ABLATION MATRIX (VCB TEST SET 2024-2025, ALPHA=10.0)")
+    print("=" * 105)
     
     target_bank = "VCB"
-    X_base, X_kalman, _, y_series = build_features(df_core, target_bank, core_banks)
+    X_base, X_kalman, X_base12, X_both, y_series = build_features(df_core, target_bank, core_banks)
+    valid_mask = ~(X_both.isna().any(axis=1) | y_series.isna())
+    dates_valid = df_core.index[valid_mask]
+    y_valid = y_series.loc[valid_mask]
+    
+    train_mask = dates_valid < "2024-01-01"
+    test_mask = dates_valid >= "2024-01-01"
+    
+    n_cal = 256
+    n_tr = train_mask.sum()
+    fit_idx = np.arange(n_tr - n_cal)
+    cal_idx = np.arange(n_tr - n_cal, n_tr)
+    
+    y_tr = y_valid[train_mask]
+    y_te = y_valid[test_mask]
+    y_fit = y_tr.iloc[fit_idx]
+    y_cal = y_tr.iloc[cal_idx]
+    
+    configs = [
+        ("1. Ridge (Base Lags only)", X_base),
+        ("2. Ridge + Base12 Manifold", X_base12),
+        ("3. Ridge + Causal Kalman", X_kalman),
+        ("4. Ridge + Base12 + Kalman", X_both),
+    ]
+    
+    b12_results = []
+    for name, X_df in configs:
+        X_tr = X_df.loc[valid_mask].loc[train_mask]
+        X_te = X_df.loc[valid_mask].loc[test_mask]
+        m = Ridge(alpha=10.0).fit(X_tr.iloc[fit_idx], y_fit)
+        pred = m.predict(X_te)
+        cal_res = np.abs(y_cal.values - m.predict(X_tr.iloc[cal_idx]))
+        k = int(np.ceil((len(cal_res) + 1) * 0.90))
+        q = np.sort(cal_res)[min(k - 1, len(cal_res) - 1)]
+        lo, hi = pred - q, pred + q
+        b12_results.append({
+            "Feature Configuration": name,
+            "MAE": mean_absolute_error(y_te, pred),
+            "RMSE": np.sqrt(mean_squared_error(y_te, pred)),
+            "OOS_R2": r2_score(y_te, pred),
+            "Coverage_90%": np.mean((y_te.values >= lo) & (y_te.values <= hi)) * 100.0,
+            "Winkler_Score": winkler_score(y_te.values, lo, hi)
+        })
+    df_b12 = pd.DataFrame(b12_results)
+    print(df_b12.to_string(index=False))
+
+def run_hypothesis_testing(df_core, core_banks):
+    print("\n" + "=" * 105)
+    print("STEP 3: CENTERED MOVING-BLOCK BOOTSTRAP HYPOTHESIS TESTING (VCB TEST SET, B=2000, ALPHA=10.0)")
+    print("=" * 105)
+    
+    target_bank = "VCB"
+    X_base, X_kalman, _, _, y_series = build_features(df_core, target_bank, core_banks)
     valid_mask = ~(X_kalman.isna().any(axis=1) | y_series.isna())
     dates_valid = df_core.index[valid_mask]
     y_valid = y_series.loc[valid_mask]
@@ -176,28 +230,29 @@ def run_hypothesis_testing(df_core, core_banks):
     y_tr = y_valid[train_mask]
     X_te = X_kalman.loc[valid_mask].loc[test_mask]
     y_te = y_valid[test_mask]
-    
-    # FIXED: Explicit definition of y_cal in this function scope
     y_fit = y_tr.iloc[fit_idx]
     y_cal = y_tr.iloc[cal_idx]
     
+    # Model 1: Ridge + Kalman (alpha=10.0)
     m_ridge = Ridge(alpha=10.0).fit(X_tr.iloc[fit_idx], y_fit)
     pred_r = m_ridge.predict(X_te)
     cal_res_r = np.abs(y_cal.values - m_ridge.predict(X_tr.iloc[cal_idx]))
-    k = int(np.ceil((len(cal_res_r) + 1) * 0.90))
-    q_r = np.sort(cal_res_r)[min(k - 1, len(cal_res_r) - 1)]
+    k_r = int(np.ceil((len(cal_res_r) + 1) * 0.90))
+    q_r = np.sort(cal_res_r)[min(k_r - 1, len(cal_res_r) - 1)]
     lo_r, hi_r = pred_r - q_r, pred_r + q_r
     loss_ridge = (hi_r - lo_r) + np.maximum(0.0, lo_r - y_te.values)*20.0 + np.maximum(0.0, y_te.values - hi_r)*20.0
     
-    m_two = NirvanaTwoStageRegressor(base_estimator="ridge", learning_rate=0.3, max_depth=5, cancer_sensitivity=1.2)
+    # Model 2: TwoStage + Kalman (UNIFIED alpha=10.0)
+    m_two = NirvanaTwoStageRegressor(base_estimator=Ridge(alpha=10.0), learning_rate=0.3, max_depth=5, cancer_sensitivity=1.2)
     m_two.fit(X_tr.iloc[fit_idx], y_fit, X_cal=X_tr.iloc[cal_idx], y_cal=y_cal)
     pred_t = m_two.predict(X_te)
     _, lo_t, hi_t = m_two.predict_interval(X_te, alpha=0.10)
     loss_two = (hi_t - lo_t) + np.maximum(0.0, lo_t - y_te.values)*20.0 + np.maximum(0.0, y_te.values - hi_t)*20.0
     
+    # Loss differential series: d_t = Loss(Ridge) - Loss(TwoStage)
     diff = loss_ridge - loss_two
     d_bar = float(np.mean(diff))
-    print(f"Sample observed mean differential d_bar: {d_bar:.6f}")
+    print(f"Sample observed mean differential d_bar (Ridge - TwoStage): {d_bar:.6f}")
     
     # Exact Centered Moving-Block Bootstrap Under H0 (mean d <= 0)
     diff_centered = diff - d_bar
@@ -214,22 +269,20 @@ def run_hypothesis_testing(df_core, core_banks):
             boot_stats.append(np.mean(diff_centered[idx]))
         boot_stats = np.array(boot_stats)
         
-        # Monte Carlo p-value with finite-sample continuity correction: (count + 1) / (B + 1)
         count_exceed = np.sum(boot_stats >= d_bar)
         p_val_corrected = float((count_exceed + 1.0) / (B + 1.0))
-        
         boot_uncentered = boot_stats + d_bar
         ci_lo, ci_hi = np.percentile(boot_uncentered, [2.5, 97.5])
         
         print(f"Block Length L={block_len:2d}: 95% CI = [{ci_lo:.5f}, {ci_hi:.5f}] | Exceedances: {count_exceed}/{B} | Centered p-value = {p_val_corrected:.4f}")
 
 def run_residual_ablation(df_core, core_banks):
-    print("\n" + "=" * 100)
-    print("STEP 3: 2x2 RESIDUAL LEARNING & FISHER PRUNING ABLATION (VCB TEST SET 2024-2025)")
-    print("=" * 100)
+    print("\n" + "=" * 105)
+    print("STEP 4: 2x2 RESIDUAL LEARNING & FISHER PRUNING ABLATION (VCB TEST SET, UNIFIED ALPHA=10.0)")
+    print("=" * 105)
     
     target_bank = "VCB"
-    X_base, X_kalman, _, y_series = build_features(df_core, target_bank, core_banks)
+    X_base, X_kalman, _, _, y_series = build_features(df_core, target_bank, core_banks)
     valid_mask = ~(X_kalman.isna().any(axis=1) | y_series.isna())
     dates_valid = df_core.index[valid_mask]
     y_valid = y_series.loc[valid_mask]
@@ -249,7 +302,6 @@ def run_residual_ablation(df_core, core_banks):
     X_te = X_kalman.loc[valid_mask].loc[test_mask]
     y_te = y_valid[test_mask]
     
-    # Pre-generate 5-Fold Walk-Forward OOF residuals
     tscv = TimeSeriesSplit(n_splits=5)
     oof_residuals = np.zeros(len(y_fit))
     oof_mask = np.zeros(len(y_fit), dtype=bool)
@@ -260,7 +312,7 @@ def run_residual_ablation(df_core, core_banks):
         
     def evaluate_variant(res_type, sens):
         if res_type == "In-Sample":
-            m = NirvanaTwoStageRegressor(base_estimator="ridge", learning_rate=0.3, max_depth=5, cancer_sensitivity=sens)
+            m = NirvanaTwoStageRegressor(base_estimator=Ridge(alpha=10.0), learning_rate=0.3, max_depth=5, cancer_sensitivity=sens)
             m.fit(X_fit, y_fit, X_cal=X_cal, y_cal=y_cal)
             pred = m.predict(X_te)
             _, lo, hi = m.predict_interval(X_te, alpha=0.10)
@@ -305,8 +357,9 @@ def run_residual_ablation(df_core, core_banks):
 
 if __name__ == "__main__":
     df_core, core_banks = run_multi_bank_benchmark()
+    run_base12_ablation(df_core, core_banks)
     run_hypothesis_testing(df_core, core_banks)
     run_residual_ablation(df_core, core_banks)
-    print("\n" + "=" * 100)
-    print("ALL AUDIT REPRODUCTION PIPELINE FINISHED SUCCESSFULLY WITH ZERO ERRORS.")
-    print("=" * 100)
+    print("\n" + "=" * 105)
+    print("ALL AUDIT REPRODUCTION PIPELINE FINISHED SUCCESSFULLY WITH STRICT UNIFIED REGULARIZATION.")
+    print("=" * 105)

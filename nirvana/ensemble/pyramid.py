@@ -5,7 +5,19 @@ Nirvana Ensemble Module: Multi-Scale Pyramid and Advanced Ensembling Architectur
 from typing import Dict, List, Optional, Union
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, RegressorMixin
+try:
+    from sklearn.base import BaseEstimator, RegressorMixin
+except ImportError:
+    class BaseEstimator:
+        def get_params(self, deep=True):
+            return {}
+        def set_params(self, **params):
+            for k, v in params.items():
+                setattr(self, k, v)
+            return self
+
+    class RegressorMixin:
+        pass
 
 from nirvana.static import NirvanaTreeRegressor
 

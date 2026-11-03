@@ -8,7 +8,7 @@ Author: yinyusi65 & Nirvana Quant Team
 License: MIT / Academic Research
 """
 
-__version__ = "1.1.5"
+__version__ = "1.1.6"
 
 from .manifold import Base12Manifold, FractionalBase12Manifold, DualClockCoordinates
 from .kalman import CausalOnlineKalman, MultivariateCausalKalman, CausalKalmanTVPRegressor
@@ -43,7 +43,7 @@ from . import domains
 
 def run_tests() -> bool:
     """
-    Run Nirvana Comprehensive Automated Test Suite (28 Core Econometric Tests).
+    Run Nirvana Comprehensive Automated Test Suite (29 Core Econometric Tests).
     Validates mathematical invariants, Kalman filtering, directional connectedness,
     Apoptosis pruning, and Conformal prediction guarantees.
     """

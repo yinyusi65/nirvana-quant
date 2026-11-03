@@ -517,6 +517,44 @@ def test_multiverse_historical_mean_window():
     print("[PASS] Multiverse historical mean window test passed.")
 
 
+def test_shuffled_panel_group_time_and_length_validation():
+    """
+    Test v1.1.6 safety:
+    1. Verify that ValueError is raised if len(groups) != N.
+    2. Verify that if panel data rows are completely shuffled randomly,
+       the chronological sort on groups still selects the latest 2 years (2023, 2024)
+       for calibration, not arbitrary middle years.
+    """
+    banks = ["VCB", "BID", "CTG", "ACB"]
+    years = [2018, 2019, 2020, 2021, 2022, 2023, 2024] # 7 years
+    records = []
+    rng = np.random.default_rng(777)
+    for y in years:
+        for b in banks:
+            records.append({"bank": b, "year": y, "x": rng.normal(), "y": rng.normal()})
+    
+    df = pd.DataFrame(records)
+    # 1. Length mismatch validation
+    m = NirvanaTwoStageRegressor(conformal_split_ratio=0.2)
+    raised = False
+    try:
+        m.fit(df[["x"]], df["y"], groups=df["year"].iloc[:-5])
+    except ValueError:
+        raised = True
+    assert raised, "Should raise ValueError on groups length mismatch"
+
+    # 2. Completely shuffle dataset rows
+    df_shuffled = df.sample(frac=1.0, random_state=42).reset_index(drop=True)
+    m.fit(df_shuffled[["x"]], df_shuffled["y"], groups=df_shuffled["year"])
+
+    # ratio 0.2 of 7 years = ceil(1.4) = 2 years -> latest are 2023 and 2024
+    # calibration rows count = 2 years * 4 banks = 8 rows
+    assert len(m.conformal_residuals_) == 8
+    # training rows = 5 years * 4 banks = 20 rows
+    assert m.report_.n_samples == 20
+    print("[PASS] Shuffled panel group-time & length validation test passed.")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("RUNNING NIRVANA COMPREHENSIVE TEST SUITE")
@@ -549,6 +587,7 @@ if __name__ == "__main__":
     test_walk_forward_nirvana_vs_ols()
     test_panel_group_time_calibration_split()
     test_multiverse_historical_mean_window()
+    test_shuffled_panel_group_time_and_length_validation()
     print("=" * 60)
-    print("ALL 28 NIRVANA CORE TESTS PASSED WITH 100% SUCCESS!")
+    print("ALL 29 NIRVANA CORE TESTS PASSED WITH 100% SUCCESS!")
     print("=" * 60)

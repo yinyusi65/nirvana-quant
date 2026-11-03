@@ -352,11 +352,28 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         y: Union[np.ndarray, pd.Series],
         X_cal: Optional[Union[np.ndarray, pd.DataFrame]] = None,
         y_cal: Optional[Union[np.ndarray, pd.Series]] = None,
+        groups: Optional[Union[np.ndarray, pd.Series, List[Any]]] = None,
     ):
         """
         Fit Phase 1 base model + Phase 2 Nirvana Apoptosis Tree on residuals.
         Supports true Split Conformal Calibration either via explicit (X_cal, y_cal)
         or via automated hold-out split (conformal_split_ratio > 0).
+
+        Parameters
+        ----------
+        X : Union[np.ndarray, pd.DataFrame]
+            Input feature matrix.
+        y : Union[np.ndarray, pd.Series]
+            Target vector.
+        X_cal : Optional[Union[np.ndarray, pd.DataFrame]], default=None
+            Independent calibration features for Split Conformal inference.
+        y_cal : Optional[Union[np.ndarray, pd.Series]], default=None
+            Independent calibration targets.
+        groups : Optional[Union[np.ndarray, pd.Series, List[Any]]], default=None
+            Group / temporal block identifier (e.g. Year, Quarter, or Date) for banking panel data.
+            When provided with conformal_split_ratio > 0, the calibration split is performed
+            by chronological group blocks (e.g. keeping all banks in the most recent years together),
+            preventing cross-sectional bank truncation and preserving panel structure.
 
         Raises
         ------
@@ -387,12 +404,32 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         cal_X_eval = X_cal
         cal_y_eval = y_cal
         if cal_X_eval is None and self.conformal_split_ratio > 0.0 and N >= 10:
-            n_cal = int(np.floor(N * self.conformal_split_ratio))
-            n_cal = max(2, min(n_cal, N - 4))
-            # Chronological temporal split for time-series / banking panels (zero future leakage)
-            # Calibration set is the most recent contiguous hold-out window: [N - n_cal : N]
-            t_idx = np.arange(N - n_cal)
-            c_idx = np.arange(N - n_cal, N)
+            if groups is not None:
+                # Group-aware chronological panel split (by year, quarter, or date block)
+                grp_arr = np.asarray(getattr(groups, "values", groups))
+                unique_grps = pd.Series(grp_arr).drop_duplicates().values
+                n_grps = len(unique_grps)
+                if n_grps >= 2:
+                    n_cal_grps = int(np.ceil(n_grps * self.conformal_split_ratio))
+                    n_cal_grps = max(1, min(n_cal_grps, n_grps - 1))
+                    cal_grp_set = set(unique_grps[-n_cal_grps:])
+                    c_mask = np.isin(grp_arr, list(cal_grp_set))
+                    t_mask = ~c_mask
+                    t_idx = np.where(t_mask)[0]
+                    c_idx = np.where(c_mask)[0]
+                else:
+                    n_cal = int(np.floor(N * self.conformal_split_ratio))
+                    n_cal = max(2, min(n_cal, N - 4))
+                    t_idx = np.arange(N - n_cal)
+                    c_idx = np.arange(N - n_cal, N)
+            else:
+                n_cal = int(np.floor(N * self.conformal_split_ratio))
+                n_cal = max(2, min(n_cal, N - 4))
+                # Chronological temporal split for time-series / banking panels (zero future leakage)
+                # Calibration set is the most recent contiguous hold-out window: [N - n_cal : N]
+                t_idx = np.arange(N - n_cal)
+                c_idx = np.arange(N - n_cal, N)
+
             cal_X_eval = X_mat[c_idx]
             cal_y_eval = y_vec[c_idx]
             X_mat = X_mat[t_idx]

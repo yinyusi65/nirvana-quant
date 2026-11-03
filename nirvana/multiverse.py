@@ -198,7 +198,9 @@ class MultiverseReconstructor:
             u2 = 0.6 * peer_vol[:first_pos] + 0.4 * y_pred_base + rng.normal(0, sigma_noise * 1.1, first_pos)
 
             # Universe 3: Macroeconomic Market Anchor Regime
-            u3 = y_pred_base + 0.25 * (mkt_vol[:first_pos] - np.mean(mkt_vol)) + rng.normal(0, sigma_noise * 0.9, first_pos)
+            # Causal historical baseline: only use mean of market volatility up to first_pos
+            hist_mkt_mean = float(np.mean(mkt_vol[:first_pos])) if first_pos > 0 else float(mkt_vol[0])
+            u3 = y_pred_base + 0.25 * (mkt_vol[:first_pos] - hist_mkt_mean) + rng.normal(0, sigma_noise * 0.9, first_pos)
 
             # Stack multiverse branches
             multiverse_matrix = np.column_stack([u1, u2, u3])

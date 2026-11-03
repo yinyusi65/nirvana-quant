@@ -246,6 +246,18 @@ class NirvanaConnectedness:
 
         t_steps, n_nodes = raw_mat.shape
 
+        # Academic Econometric Guard: Degrees of freedom check
+        if t_steps < 3 * n_nodes:
+            import warnings
+            warnings.warn(
+                f"[Nirvana Network Warning] Sample size T={t_steps} is small relative to nodes N={n_nodes} (T < 3*N). "
+                "Estimating dynamic high-dimensional VAR / connectedness on short annual panels may suffer from severe "
+                "degrees-of-freedom depletion and ill-conditioned covariance matrices. "
+                "Recommended: Use higher-frequency data (daily or weekly log-volatility) or reduce the number of nodes.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         if n_nodes < 2:
             single_table = pd.DataFrame(
                 [[100.0, 0.0]], index=names, columns=names + ["FROM_others"]

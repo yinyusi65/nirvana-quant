@@ -85,12 +85,14 @@ print("Top Shock Receivers:", results.top_receivers[:5])
 
 ### 5. Counterfactual Panel Reconstruction (`nirvana.multiverse`)
 * Implements counterfactual imputation for unbalanced historical panels (such as pre-listing asset periods) using Tier-Adaptive Peer Anchoring.
-* Eliminates look-ahead bias by conditioning synthesis strictly on contemporaneous peer dynamics and macroeconomic benchmarks.
+* **Academic Scope Notice**: Employs retrospective Ridge regression calibrated on post-listing observed periods to synthesize unobserved historical volatility, designed strictly for retrospective research and historical panel continuity (eliminating IPO-jump discontinuities). Not intended for real-time causal forecasting.
+* Enforces causal alignment during synthesis: eliminates look-ahead bias across all market and peer conditioning features up to each target date.
 * Uses cubic Hermite transition polynomials ($3t^2 - 2t^3$) to ensure boundary continuity between reconstructed and observed sample periods.
 
-### 6. Two-Stage Estimation & Conformal Prediction (`nirvana.static`, `nirvana.proof`)
+### 6. Two-Stage Estimation & Panel Conformal Prediction (`nirvana.static`, `nirvana.proof`)
 * Combines parametric base estimators (OLS, Ridge, Lasso) with non-linear residual trees in a two-stage additive framework.
 * Incorporates Ancestral Fallback Apoptosis Pruning (`_get_healthy_node_value`) to eradicate overfitted noise memorization.
+* Provides **Panel-Aware Split Conformal Prediction**: accepts `groups` (e.g. Year / Quarter blocks) to guarantee that hold-out calibration maintains the entire cross-section of banks simultaneously, preserving panel structure.
 * Computes exact finite-sample distribution-free prediction intervals via Vovk's order statistic Conformal Prediction, satisfying finite-sample coverage guarantees:
   $$P\Big(Y_{n+1} \in [\hat{Y}_{n+1} - q, \hat{Y}_{n+1} + q]\Big) \ge 1 - \alpha$$
 

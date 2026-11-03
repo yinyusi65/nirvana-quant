@@ -455,6 +455,68 @@ def test_walk_forward_nirvana_vs_ols():
     )
 
 
+def test_panel_group_time_calibration_split():
+    """
+    Test panel-aware conformal split by Year blocks (groups parameter).
+    Ensures that when groups are specified (e.g. 5 banks x 10 years = 50 rows),
+    the calibration set contains the complete cross-section of all 5 banks
+    for the latest year(s), preserving panel structure without row truncation.
+    """
+    banks = ["VCB", "CTG", "BID", "ACB", "TCB"]
+    years = list(range(2015, 2025))  # 10 years: 2015 - 2024
+    records = []
+    rng = np.random.default_rng(123)
+    for y in years:
+        for b in banks:
+            x1 = rng.normal(0, 1)
+            x2 = rng.normal(0, 1)
+            target = 1.5 * x1 - 0.8 * x2 + rng.normal(0, 0.2)
+            records.append({"bank": b, "year": y, "x1": x1, "x2": x2, "y": target})
+
+    df = pd.DataFrame(records)
+    X = df[["x1", "x2"]]
+    y = df["y"]
+    groups = df["year"]
+
+    # conformal_split_ratio = 0.2 -> 2 out of 10 years (2023, 2024) should be calibration
+    model = NirvanaTwoStageRegressor(conformal_split_ratio=0.2)
+    model.fit(X, y, groups=groups)
+
+    # 2 years x 5 banks = 10 calibration rows
+    assert len(model.conformal_residuals_) == 10, (
+        f"Expected 10 calibration samples (2 full years x 5 banks), got {len(model.conformal_residuals_)}"
+    )
+    # Remaining 8 years x 5 banks = 40 training samples
+    assert model.report_.n_samples == 40, (
+        f"Expected 40 training samples (8 full years x 5 banks), got {model.report_.n_samples}"
+    )
+    print("[PASS] Panel Group-Time Calibration Split test passed.")
+
+
+def test_multiverse_historical_mean_window():
+    """
+    Ensure Multiverse Universe 3 uses only historical market mean up to first_pos,
+    preventing any future mean contamination.
+    """
+    rng = np.random.default_rng(42)
+    T = 60
+    # Create market series where past is low and future is very high
+    mkt = pd.Series([1.0] * 30 + [10.0] * 30)
+    panel = pd.DataFrame({
+        "B1": rng.normal(2.0, 0.1, T),
+        "UNLISTED": [np.nan] * 30 + list(rng.normal(2.5, 0.1, 30))
+    })
+    recon = MultiverseReconstructor(boundary_window=5)
+    res = recon.reconstruct(panel, market_index=mkt)
+
+    # The reconstructed values in rows [0:30] should not explode from future market mean (10.0)
+    synth_mean = float(res["UNLISTED"].iloc[:30].mean())
+    assert synth_mean < 5.0, (
+        f"Synthetic pre-listing values contaminated by future market boom: mean={synth_mean}"
+    )
+    print("[PASS] Multiverse historical mean window test passed.")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("RUNNING NIRVANA COMPREHENSIVE TEST SUITE")
@@ -485,6 +547,8 @@ if __name__ == "__main__":
     test_xcal_ycal_validation()
     test_multiverse_no_leakage_pre_listing()
     test_walk_forward_nirvana_vs_ols()
+    test_panel_group_time_calibration_split()
+    test_multiverse_historical_mean_window()
     print("=" * 60)
-    print("ALL 26 NIRVANA CORE TESTS PASSED WITH 100% SUCCESS!")
+    print("ALL 28 NIRVANA CORE TESTS PASSED WITH 100% SUCCESS!")
     print("=" * 60)

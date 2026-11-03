@@ -23,6 +23,7 @@ from nirvana import (
     stata_summarize,
     stata_pwcorr,
 )
+from nirvana.static import NirvanaTwoStageRegressor
 
 def test_volatility_censoring():
     h = np.array([105.0, 110.0])
@@ -282,6 +283,178 @@ def test_stata_regression_and_diagnostics():
     assert vif_res["mean_vif"] < 5.0
     print("[PASS] Stata econometric engine and post-estimation diagnostics test passed.")
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NEW TESTS (v1.1.3) — addressing ChatGPT peer-review critiques
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_conformal_x_residuals_alignment():
+    """
+    Verify that after chronological split, the X used to train Phase 2
+    matches the residuals in shape (no row-count mismatch between phases).
+    """
+    rng = np.random.default_rng(7)
+    N = 100
+    X = rng.normal(0, 1, (N, 3))
+    y = 2.0 * X[:, 0] - X[:, 1] + rng.normal(0, 0.3, N)
+    df_X = pd.DataFrame(X, columns=["A", "B", "C"])
+
+    model = NirvanaTwoStageRegressor(conformal_split_ratio=0.2)
+    model.fit(df_X, y)
+
+    # After split: training rows = N - ceil(N * 0.2) = 80, calibration = 20
+    n_cal = int(np.floor(N * 0.2))
+    n_train_expected = N - n_cal
+    report = model.report_
+    assert report.n_samples == n_train_expected, (
+        f"Training sample count mismatch: expected {n_train_expected}, got {report.n_samples}"
+    )
+    # Calibration residuals should come from the holdout set (size = n_cal)
+    assert len(model.conformal_residuals_) == n_cal, (
+        f"Conformal residuals size mismatch: expected {n_cal}, got {len(model.conformal_residuals_)}"
+    )
+    print("[PASS] Conformal X–residuals alignment after chronological split test passed.")
+
+
+def test_conformal_empirical_coverage():
+    """
+    Empirical coverage of predict_interval must meet or exceed the target (1-alpha)
+    on a held-out test set when conformal_split_ratio=0.2 is used.
+    Coverage guarantee: P(Y in [lo, hi]) >= 1 - alpha (finite-sample).
+    We test at alpha=0.10 (90% target) with N=300, expecting >= 85% empirical coverage.
+    """
+    rng = np.random.default_rng(99)
+    N_total = 400
+    X_all = rng.normal(0, 1, (N_total, 4))
+    y_all = 3.0 * X_all[:, 0] - 1.5 * X_all[:, 1] + 0.5 * X_all[:, 2] ** 2 + rng.normal(0, 0.5, N_total)
+
+    # chronological split: first 300 train+cal, last 100 test
+    n_train = 300
+    X_train = pd.DataFrame(X_all[:n_train], columns=["f0", "f1", "f2", "f3"])
+    y_train = y_all[:n_train]
+    X_test = X_all[n_train:]
+    y_test = y_all[n_train:]
+
+    model = NirvanaTwoStageRegressor(conformal_split_ratio=0.2)
+    model.fit(X_train, y_train)
+
+    cov = model.evaluate_conformal_coverage(X_test, y_test, alpha=0.10)
+    assert cov["empirical_coverage"] >= 0.85, (
+        f"Empirical coverage below safety threshold: {cov['empirical_coverage']:.3f} < 0.85 "
+        f"(target 90%). Conformal guarantee may be violated."
+    )
+    print(
+        f"[PASS] Conformal empirical coverage test passed: "
+        f"target=90%, actual={cov['empirical_coverage']*100:.1f}%, "
+        f"interval_width={cov['average_interval_width']:.3f}"
+    )
+
+
+def test_xcal_ycal_validation():
+    """
+    Passing only one of X_cal / y_cal must raise ValueError immediately.
+    """
+    rng = np.random.default_rng(0)
+    X = rng.normal(0, 1, (50, 2))
+    y = rng.normal(0, 1, 50)
+    X_cal = rng.normal(0, 1, (10, 2))
+
+    model = NirvanaTwoStageRegressor()
+    raised = False
+    try:
+        model.fit(X, y, X_cal=X_cal, y_cal=None)  # only X_cal provided
+    except ValueError:
+        raised = True
+    assert raised, "fit() must raise ValueError when only X_cal is provided without y_cal"
+
+    raised2 = False
+    try:
+        model.fit(X, y, X_cal=None, y_cal=y[:10])  # only y_cal provided
+    except ValueError:
+        raised2 = True
+    assert raised2, "fit() must raise ValueError when only y_cal is provided without X_cal"
+
+    print("[PASS] X_cal / y_cal paired validation test passed.")
+
+
+def test_multiverse_no_leakage_pre_listing():
+    """
+    The reconstruction of a pre-listing bank must use only Ridge coefficients
+    learned on the OBSERVED (post-listing) period — not the pre-listing period.
+    Proxy test: the first observed value of the bank after listing must be
+    preserved exactly (no overwrite of post-listing data by reconstruction).
+    """
+    rng = np.random.default_rng(13)
+    T = 80
+    panel = pd.DataFrame({
+        "VCB": rng.normal(3.0, 0.2, T),
+        "CTG": rng.normal(3.1, 0.2, T),
+        "LATE_BANK": [np.nan] * 30 + list(rng.normal(3.05, 0.15, T - 30)),
+    })
+    original_post = panel["LATE_BANK"].iloc[30:].values.copy()
+
+    recon = MultiverseReconstructor(boundary_window=5)
+    result = recon.reconstruct(panel)
+
+    # Post-listing values (rows 30 onwards) must be preserved exactly
+    post_result = result["LATE_BANK"].iloc[30:].values
+    assert np.allclose(post_result, original_post, atol=1e-10), (
+        "Reconstruction overwrote post-listing observed data — leakage detected!"
+    )
+    # Pre-listing values must now be filled (no NaN)
+    pre_result = result["LATE_BANK"].iloc[:30]
+    assert not pre_result.isna().any(), "Pre-listing NaNs not filled by Multiverse reconstruction"
+    print("[PASS] Multiverse no-leakage pre-listing data integrity test passed.")
+
+
+def test_walk_forward_nirvana_vs_ols():
+    """
+    Walk-forward RMSE: NirvanaTwoStageRegressor must beat plain OLS on a
+    dataset with a genuine non-linear signal component.
+    Uses 5-fold walk-forward (expanding window) on N=300 with quadratic term.
+    """
+    rng = np.random.default_rng(42)
+    N = 300
+    X_raw = rng.normal(0, 1, (N, 3))
+    y = 1.5 * X_raw[:, 0] - 2.0 * X_raw[:, 1] + 0.8 * (X_raw[:, 2] ** 2) + rng.normal(0, 0.4, N)
+
+    n_splits = 5
+    fold_size = N // (n_splits + 1)
+    rmse_ols, rmse_nirvana = [], []
+
+    for i in range(n_splits):
+        train_end = fold_size * (i + 1)
+        test_end = train_end + fold_size
+        if test_end > N:
+            break
+
+        X_tr, y_tr = X_raw[:train_end], y[:train_end]
+        X_te, y_te = X_raw[train_end:test_end], y[train_end:test_end]
+
+        # OLS baseline
+        X_des = np.column_stack([np.ones(len(X_tr)), X_tr])
+        beta_ols = np.linalg.lstsq(X_des, y_tr, rcond=None)[0]
+        y_ols = np.column_stack([np.ones(len(X_te)), X_te]) @ beta_ols
+        rmse_ols.append(float(np.sqrt(np.mean((y_te - y_ols) ** 2))))
+
+        # Nirvana two-stage
+        m = NirvanaTwoStageRegressor(conformal_split_ratio=0.0, max_depth=6, min_samples_split=4)
+        m.fit(X_tr, y_tr)
+        y_nir = m.predict(X_te)
+        rmse_nirvana.append(float(np.sqrt(np.mean((y_te - y_nir) ** 2))))
+
+    avg_ols = float(np.mean(rmse_ols))
+    avg_nir = float(np.mean(rmse_nirvana))
+    assert avg_nir < avg_ols, (
+        f"Nirvana failed to beat OLS on walk-forward: "
+        f"Nirvana RMSE={avg_nir:.4f}, OLS RMSE={avg_ols:.4f}"
+    )
+    print(
+        f"[PASS] Walk-forward Nirvana vs OLS test passed: "
+        f"Nirvana RMSE={avg_nir:.4f} < OLS RMSE={avg_ols:.4f}"
+    )
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("RUNNING NIRVANA COMPREHENSIVE TEST SUITE")
@@ -307,6 +480,11 @@ if __name__ == "__main__":
     test_unlisted_bank_median_weight_fallback()
     test_static_booster_phase2_r2_elevation()
     test_stata_regression_and_diagnostics()
+    test_conformal_x_residuals_alignment()
+    test_conformal_empirical_coverage()
+    test_xcal_ycal_validation()
+    test_multiverse_no_leakage_pre_listing()
+    test_walk_forward_nirvana_vs_ols()
     print("=" * 60)
-    print("ALL 21 NIRVANA CORE TESTS PASSED WITH 100% SUCCESS!")
+    print("ALL 26 NIRVANA CORE TESTS PASSED WITH 100% SUCCESS!")
     print("=" * 60)

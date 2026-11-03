@@ -69,6 +69,20 @@ class MultiverseReconstructor:
         Parameters:
         - bank_panel: (T, N) DataFrame of daily Parkinson log-volatility (2017 - 2025).
         - market_index: Optional Series of daily market index (e.g. VNINDEX).
+
+        .. warning::
+            **Retrospective Backcasting Caveat**: This method uses retrospective Ridge
+            regression calibrated on the observed post-listing period to backcast
+            pre-listing values. Coefficients are estimated on data that is temporally
+            posterior to the synthetic window, meaning the reconstruction is inherently
+            non-causal with respect to the reconstructed period.
+
+            **Suitable for**: Historical panel reconstruction to eliminate IPO-jump
+            discontinuities in systemic risk models (static, retrospective research).
+
+            **NOT suitable for**: Real-time causal forecasting, live trading signals,
+            or any application requiring strict causal guarantees during the
+            pre-listing period.
         """
         active_lambda = self.reg_lambda if reg_lambda is None else reg_lambda
         active_window = self.boundary_window if boundary_window is None else boundary_window
@@ -221,5 +235,6 @@ class MultiverseReconstructor:
             reconstructed.iloc[:first_pos, reconstructed.columns.get_loc(bank)] = y_synthetic
 
         # Intermittent post-IPO trading halts / holiday suspensions fallback
-        reconstructed = reconstructed.ffill().bfill().fillna(0.0)
+        # Forward-fill only: strictly causal, no backward contamination from future sessions
+        reconstructed = reconstructed.ffill().fillna(0.0)
         return reconstructed

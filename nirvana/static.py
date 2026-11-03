@@ -316,7 +316,7 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         factor_compression: bool = False,
         n_components: Optional[int] = None,
         manifold_lstr: bool = False,
-        conformal_split_ratio: float = 0.0,
+        conformal_split_ratio: float = 0.15,
     ):
         self.base_estimator = base_estimator
         self.cancer_sensitivity = cancer_sensitivity
@@ -357,7 +357,19 @@ class NirvanaTwoStageRegressor(BaseEstimator, RegressorMixin):
         Fit Phase 1 base model + Phase 2 Nirvana Apoptosis Tree on residuals.
         Supports true Split Conformal Calibration either via explicit (X_cal, y_cal)
         or via automated hold-out split (conformal_split_ratio > 0).
+
+        Raises
+        ------
+        ValueError
+            If exactly one of X_cal / y_cal is provided (must pass both or neither).
         """
+        # Guard: X_cal and y_cal must be passed together
+        if (X_cal is None) != (y_cal is None):
+            raise ValueError(
+                "X_cal and y_cal must be provided together. "
+                "Pass both for external calibration, or neither to use conformal_split_ratio."
+            )
+
         if hasattr(X, "columns"):
             self.feature_names_ = [str(c) for c in X.columns]
         elif hasattr(X, "shape") and len(X.shape) > 1:

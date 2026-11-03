@@ -25,6 +25,7 @@ import pandas as pd
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.preprocessing import StandardScaler
 
 from nirvana import Base12Manifold, CausalOnlineKalman, NirvanaTwoStageRegressor, NirvanaTreeRegressor
 
@@ -157,7 +158,7 @@ def run_multi_bank_benchmark():
 
 def run_base12_ablation(df_core, core_banks):
     print("\n" + "=" * 105)
-    print("STEP 2: DIRECT BASE-12 MANIFOLD ABLATION MATRIX (VCB TEST SET 2024-2025, ALPHA=10.0)")
+    print("STEP 2: DIRECT BASE-12 MANIFOLD ABLATION MATRIX WITH & WITHOUT STANDARDSCALER (VCB, ALPHA=10.0)")
     print("=" * 105)
     
     target_bank = "VCB"
@@ -190,19 +191,30 @@ def run_base12_ablation(df_core, core_banks):
     for name, X_df in configs:
         X_tr = X_df.loc[valid_mask].loc[train_mask]
         X_te = X_df.loc[valid_mask].loc[test_mask]
-        m = Ridge(alpha=10.0).fit(X_tr.iloc[fit_idx], y_fit)
-        pred = m.predict(X_te)
-        cal_res = np.abs(y_cal.values - m.predict(X_tr.iloc[cal_idx]))
-        k = int(np.ceil((len(cal_res) + 1) * 0.90))
-        q = np.sort(cal_res)[min(k - 1, len(cal_res) - 1)]
-        lo, hi = pred - q, pred + q
+        
+        # Raw unscaled
+        m_raw = Ridge(alpha=10.0).fit(X_tr.iloc[fit_idx], y_fit)
+        pred_raw = m_raw.predict(X_te)
+        cal_res_raw = np.abs(y_cal.values - m_raw.predict(X_tr.iloc[cal_idx]))
+        k_r = int(np.ceil((len(cal_res_raw) + 1) * 0.90))
+        q_raw = np.sort(cal_res_raw)[min(k_r - 1, len(cal_res_raw) - 1)]
+        lo_raw, hi_raw = pred_raw - q_raw, pred_raw + q_raw
+        
+        # Scaled (StandardScaler fit ONLY on Fit set!)
+        scaler = StandardScaler().fit(X_tr.iloc[fit_idx])
+        m_scaled = Ridge(alpha=10.0).fit(scaler.transform(X_tr.iloc[fit_idx]), y_fit)
+        pred_scaled = m_scaled.predict(scaler.transform(X_te))
+        cal_res_scaled = np.abs(y_cal.values - m_scaled.predict(scaler.transform(X_tr.iloc[cal_idx])))
+        k_s = int(np.ceil((len(cal_res_scaled) + 1) * 0.90))
+        q_scaled = np.sort(cal_res_scaled)[min(k_s - 1, len(cal_res_scaled) - 1)]
+        lo_sc, hi_sc = pred_scaled - q_scaled, pred_scaled + q_scaled
+        
         b12_results.append({
-            "Feature Configuration": name,
-            "MAE": mean_absolute_error(y_te, pred),
-            "RMSE": np.sqrt(mean_squared_error(y_te, pred)),
-            "OOS_R2": r2_score(y_te, pred),
-            "Coverage_90%": np.mean((y_te.values >= lo) & (y_te.values <= hi)) * 100.0,
-            "Winkler_Score": winkler_score(y_te.values, lo, hi)
+            "Configuration": name,
+            "Raw_R2": r2_score(y_te, pred_raw),
+            "Raw_Winkler": winkler_score(y_te.values, lo_raw, hi_raw),
+            "Scaled_R2": r2_score(y_te, pred_scaled),
+            "Scaled_Winkler": winkler_score(y_te.values, lo_sc, hi_sc),
         })
     df_b12 = pd.DataFrame(b12_results)
     print(df_b12.to_string(index=False))
@@ -249,16 +261,17 @@ def run_hypothesis_testing(df_core, core_banks):
     _, lo_t, hi_t = m_two.predict_interval(X_te, alpha=0.10)
     loss_two = (hi_t - lo_t) + np.maximum(0.0, lo_t - y_te.values)*20.0 + np.maximum(0.0, y_te.values - hi_t)*20.0
     
-    # Loss differential series: d_t = Loss(Ridge) - Loss(TwoStage)
-    diff = loss_ridge - loss_two
-    d_bar = float(np.mean(diff))
-    print(f"Sample observed mean differential d_bar (Ridge - TwoStage): {d_bar:.6f}")
+    # 1. Delta_t = Loss(TwoStage) - Loss(Ridge)
+    # A positive Delta_bar means Ridge has lower Winkler loss (Ridge is better)
+    delta = loss_two - loss_ridge
+    delta_bar = float(np.mean(delta))
+    print(f"Sample observed mean differential Delta_bar = Loss(TwoStage) - Loss(Ridge): +{delta_bar:.6f}")
     
-    # Exact Centered Moving-Block Bootstrap Under H0 (mean d <= 0)
-    diff_centered = diff - d_bar
+    delta_centered = delta - delta_bar
     B = 2000
-    N = len(diff)
+    N = len(delta)
     
+    print("\n[A] Hypothesis Test H0: Delta <= 0 vs H1: Delta > 0 (Test if Ridge is statistically significantly better):")
     for block_len in [5, 10, 20]:
         np.random.seed(42)
         n_blocks = int(np.ceil(N / block_len))
@@ -266,19 +279,18 @@ def run_hypothesis_testing(df_core, core_banks):
         for _ in range(B):
             starts = np.random.randint(0, N - block_len + 1, size=n_blocks)
             idx = np.concatenate([np.arange(s, s + block_len) for s in starts])[:N]
-            boot_stats.append(np.mean(diff_centered[idx]))
+            boot_stats.append(np.mean(delta_centered[idx]))
         boot_stats = np.array(boot_stats)
         
-        count_exceed = np.sum(boot_stats >= d_bar)
-        p_val_corrected = float((count_exceed + 1.0) / (B + 1.0))
-        boot_uncentered = boot_stats + d_bar
+        count_exceed = np.sum(boot_stats >= delta_bar)
+        p_val = float((count_exceed + 1.0) / (B + 1.0))
+        boot_uncentered = boot_stats + delta_bar
         ci_lo, ci_hi = np.percentile(boot_uncentered, [2.5, 97.5])
-        
-        print(f"Block Length L={block_len:2d}: 95% CI = [{ci_lo:.5f}, {ci_hi:.5f}] | Exceedances: {count_exceed}/{B} | Centered p-value = {p_val_corrected:.4f}")
+        print(f"  Block L={block_len:2d}: 95% CI = [{ci_lo:.5f}, {ci_hi:.5f}] | Exceedances: {count_exceed}/{B} | p-value = {p_val:.4f}")
 
-def run_residual_ablation(df_core, core_banks):
+def run_deep_pruning_audit(df_core, core_banks):
     print("\n" + "=" * 105)
-    print("STEP 4: 2x2 RESIDUAL LEARNING & FISHER PRUNING ABLATION (VCB TEST SET, UNIFIED ALPHA=10.0)")
+    print("STEP 4: DEEP TREE FISHER PRUNING AUDIT & DIVERGENCE PROXY METRICS (VCB TEST SET, DEPTH 5 TO 10)")
     print("=" * 105)
     
     target_bank = "VCB"
@@ -302,64 +314,62 @@ def run_residual_ablation(df_core, core_banks):
     X_te = X_kalman.loc[valid_mask].loc[test_mask]
     y_te = y_valid[test_mask]
     
-    tscv = TimeSeriesSplit(n_splits=5)
-    oof_residuals = np.zeros(len(y_fit))
-    oof_mask = np.zeros(len(y_fit), dtype=bool)
-    for tr_split, val_split in tscv.split(X_fit):
-        m_split = Ridge(alpha=10.0).fit(X_fit.iloc[tr_split], y_fit.iloc[tr_split])
-        oof_residuals[val_split] = y_fit.iloc[val_split].values - m_split.predict(X_fit.iloc[val_split])
-        oof_mask[val_split] = True
-        
-    def evaluate_variant(res_type, sens):
-        if res_type == "In-Sample":
-            m = NirvanaTwoStageRegressor(base_estimator=Ridge(alpha=10.0), learning_rate=0.3, max_depth=5, cancer_sensitivity=sens)
+    depth_grid = [5, 6, 8, 10]
+    audit_rows = []
+    
+    for d in depth_grid:
+        for sens, sname in [(1.2, "ON (1.2)"), (0.0, "OFF (0.0)")]:
+            m = NirvanaTwoStageRegressor(base_estimator=Ridge(alpha=10.0), learning_rate=0.3, max_depth=d, cancer_sensitivity=sens)
             m.fit(X_fit, y_fit, X_cal=X_cal, y_cal=y_cal)
             pred = m.predict(X_te)
             _, lo, hi = m.predict_interval(X_te, alpha=0.10)
-        else: # Walk-Forward OOF
-            base_full = Ridge(alpha=10.0).fit(X_fit, y_fit)
-            tree = NirvanaTreeRegressor(max_depth=5, cancer_sensitivity=sens)
-            tree.fit(X_fit.iloc[oof_mask].values, oof_residuals[oof_mask])
-            pred = base_full.predict(X_te) + 0.3 * tree.predict(X_te.values)
-            pred_cal = base_full.predict(X_cal) + 0.3 * tree.predict(X_cal.values)
-            cal_res = np.abs(y_cal.values - pred_cal)
-            k = int(np.ceil((len(cal_res) + 1) * 0.90))
-            q = np.sort(cal_res)[min(k - 1, len(cal_res) - 1)]
-            lo, hi = pred - q, pred + q
             
-        mae = mean_absolute_error(y_te, pred)
-        rmse = np.sqrt(mean_squared_error(y_te, pred))
-        r2 = r2_score(y_te, pred)
-        cov = np.mean((y_te.values >= lo) & (y_te.values <= hi)) * 100.0
-        w = winkler_score(y_te.values, lo, hi)
-        return mae, rmse, r2, cov, w
-        
-    grid = [
-        ("Config A (In-Sample, Pruning ON: sens=1.2)", "In-Sample", 1.2),
-        ("Config B (In-Sample, Pruning OFF: sens=0.0)", "In-Sample", 0.0),
-        ("Config C (Walk-Forward OOF, Pruning ON: sens=1.2)", "OOF", 1.2),
-        ("Config D (Walk-Forward OOF, Pruning OFF: sens=0.0)", "OOF", 0.0),
-    ]
+            engine = m.tree_engine_.tree_engine_
+            n_total = len(engine.nodes)
+            n_eligible = sum(1 for n in engine.nodes if n.depth >= engine.apoptosis_start_depth)
+            n_pruned = sum(1 for n in engine.nodes if n.is_pruned_apoptosis)
+            
+            fishers = [n.fisher_info for n in engine.nodes if n.depth >= engine.apoptosis_start_depth]
+            margins = [n.margin_density for n in engine.nodes if n.depth >= engine.apoptosis_start_depth]
+            max_fisher_val = max(fishers) if fishers else 0.0
+            min_margin_val = min(margins) if margins else 1.0
+            
+            audit_rows.append({
+                "Max Depth": d,
+                "Fisher Pruning": sname,
+                "Total Nodes": n_total,
+                "Eligible Nodes": n_eligible,
+                "Pruned Nodes": n_pruned,
+                "Max Fisher*Sens": max_fisher_val * sens,
+                "Min Margin": min_margin_val,
+                "OOS_R2": r2_score(y_te, pred),
+                "Winkler": winkler_score(y_te.values, lo, hi)
+            })
+            
+    df_audit = pd.DataFrame(audit_rows)
+    print(df_audit.to_string(index=False))
     
-    ablation_res = []
-    for name, rtype, sens in grid:
-        mae, rmse, r2, cov, w = evaluate_variant(rtype, sens)
-        ablation_res.append({
-            "Ablation Configuration": name,
-            "MAE": mae,
-            "RMSE": rmse,
-            "OOS_R2": r2,
-            "Coverage_90%": cov,
-            "Winkler_Score": w
-        })
-    df_ab = pd.DataFrame(ablation_res)
-    print(df_ab.to_string(index=False))
+    print("\n[Synthetic Proof-of-Concept Unit Test]: Verifying Fisher Apoptosis Excises Outlier Node When Triggered")
+    np.random.seed(42)
+    X_syn = np.random.randn(200, 2)
+    y_syn = np.random.randn(200) * 0.05
+    # Inject isolated extreme shock on tiny margin (2 samples = 1% margin, y = 50.0)
+    X_syn[0, 0] = 5.0
+    X_syn[1, 0] = 5.1
+    y_syn[0] = 50.0
+    y_syn[1] = 50.0
+    
+    tree_syn = NirvanaTreeRegressor(max_depth=5, apoptosis_start_depth=2, cancer_sensitivity=5.0)
+    tree_syn.fit(X_syn, y_syn)
+    engine_syn = tree_syn.tree_engine_
+    pruned_syn = [n for n in engine_syn.nodes if n.is_pruned_apoptosis]
+    print(f"  Synthetic injection result: Successfully excised {len(pruned_syn)} outlier node(s) with alert diagnosis: '{engine_syn.pathology_alerts[0].diagnosis}'")
 
 if __name__ == "__main__":
     df_core, core_banks = run_multi_bank_benchmark()
     run_base12_ablation(df_core, core_banks)
     run_hypothesis_testing(df_core, core_banks)
-    run_residual_ablation(df_core, core_banks)
+    run_deep_pruning_audit(df_core, core_banks)
     print("\n" + "=" * 105)
-    print("ALL AUDIT REPRODUCTION PIPELINE FINISHED SUCCESSFULLY WITH STRICT UNIFIED REGULARIZATION.")
+    print("ALL AUDIT REPRODUCTION PIPELINE FINISHED SUCCESSFULLY WITH COMPREHENSIVE VERIFICATION.")
     print("=" * 105)

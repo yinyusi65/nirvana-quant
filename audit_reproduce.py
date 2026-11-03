@@ -261,8 +261,8 @@ def run_hypothesis_testing(df_core, core_banks):
     _, lo_t, hi_t = m_two.predict_interval(X_te, alpha=0.10)
     loss_two = (hi_t - lo_t) + np.maximum(0.0, lo_t - y_te.values)*20.0 + np.maximum(0.0, y_te.values - hi_t)*20.0
     
-    # 1. Delta_t = Loss(TwoStage) - Loss(Ridge)
-    # A positive Delta_bar means Ridge has lower Winkler loss (Ridge is better)
+    # Delta_t = Loss(TwoStage) - Loss(Ridge)
+    # A positive Delta_bar means Ridge has lower Winkler loss in sample
     delta = loss_two - loss_ridge
     delta_bar = float(np.mean(delta))
     print(f"Sample observed mean differential Delta_bar = Loss(TwoStage) - Loss(Ridge): +{delta_bar:.6f}")
@@ -271,7 +271,7 @@ def run_hypothesis_testing(df_core, core_banks):
     B = 2000
     N = len(delta)
     
-    print("\n[A] Hypothesis Test H0: Delta <= 0 vs H1: Delta > 0 (Test if Ridge is statistically significantly better):")
+    print("\n[A] Hypothesis Test H0: Delta <= 0 vs H1: Delta > 0 (Testing if Ridge is statistically significantly superior):")
     for block_len in [5, 10, 20]:
         np.random.seed(42)
         n_blocks = int(np.ceil(N / block_len))
@@ -331,7 +331,7 @@ def run_deep_pruning_audit(df_core, core_banks):
             
             fishers = [n.fisher_info for n in engine.nodes if n.depth >= engine.apoptosis_start_depth]
             margins = [n.margin_density for n in engine.nodes if n.depth >= engine.apoptosis_start_depth]
-            max_fisher_val = max(fishers) if fishers else 0.0
+            max_raw_fisher = max(fishers) if fishers else 0.0
             min_margin_val = min(margins) if margins else 1.0
             
             audit_rows.append({
@@ -340,7 +340,8 @@ def run_deep_pruning_audit(df_core, core_banks):
                 "Total Nodes": n_total,
                 "Eligible Nodes": n_eligible,
                 "Pruned Nodes": n_pruned,
-                "Max Fisher*Sens": max_fisher_val * sens,
+                "Max Raw Fisher": max_raw_fisher,
+                "Max Fisher*Sens": max_raw_fisher * sens,
                 "Min Margin": min_margin_val,
                 "OOS_R2": r2_score(y_te, pred),
                 "Winkler": winkler_score(y_te.values, lo, hi)
@@ -363,7 +364,16 @@ def run_deep_pruning_audit(df_core, core_banks):
     tree_syn.fit(X_syn, y_syn)
     engine_syn = tree_syn.tree_engine_
     pruned_syn = [n for n in engine_syn.nodes if n.is_pruned_apoptosis]
-    print(f"  Synthetic injection result: Successfully excised {len(pruned_syn)} outlier node(s) with alert diagnosis: '{engine_syn.pathology_alerts[0].diagnosis}'")
+    
+    # Strict automated unit assertions
+    assert len(pruned_syn) == 1, f"Expected exactly 1 pruned node, found {len(pruned_syn)}"
+    assert len(engine_syn.pathology_alerts) == 1, f"Expected exactly 1 alert, found {len(engine_syn.pathology_alerts)}"
+    assert pruned_syn[0].depth >= engine_syn.apoptosis_start_depth, "Pruned node depth must satisfy apoptosis threshold"
+    assert engine_syn.pathology_alerts[0].node_idx == engine_syn.nodes.index(pruned_syn[0]), "Alert must match pruned node"
+    assert pruned_syn[0].sample_count == 2, f"Expected 2 outlier samples in pruned node, found {pruned_syn[0].sample_count}"
+    assert set(pruned_syn[0].sample_indices) == {0, 1}, "Pruned node indices must match injected outlier indices {0, 1}"
+    
+    print(f"  Strict Assertions Passed: Excised node depth={pruned_syn[0].depth}, samples={pruned_syn[0].sample_count}, sample_indices={set(pruned_syn[0].sample_indices)}, alert='{engine_syn.pathology_alerts[0].diagnosis}'")
 
 if __name__ == "__main__":
     df_core, core_banks = run_multi_bank_benchmark()
